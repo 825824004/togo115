@@ -36,6 +36,7 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
         semaphore = runtime.telegram_dialog_search_semaphore()
         all_results: list[SearchResult] = []
         state = shared_state or TelegramSearchSharedState()
+        stop_event = asyncio.Event()
         extract_ms_total = 0
         cancelled = 0
         empty_streak = 0
@@ -46,12 +47,12 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
         )
 
         async def search_one(dialog: dict[str, Any]) -> tuple[list[SearchResult], int]:
-            if budget.exhausted() or len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
+            if budget.exhausted() or stop_event.is_set() or len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
                 return [], 0
             source_key = str(dialog.get("canonical") or dialog.get("source") or "")
             async with runtime.telegram_source_lock(source_key):
                 async with semaphore:
-                    if budget.exhausted() or len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
+                    if budget.exhausted() or stop_event.is_set() or len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
                         return [], 0
                     await telegram_request_gate.wait()
                     hits, dialog_extract_ms = await self._search_dialog_history(
@@ -62,6 +63,7 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
                         budget,
                         incremental=incremental,
                         shared_state=state,
+                        stop_event=stop_event,
                     )
                     if hits and source_key:
                         state.note_dialog_hits(source_key, len(hits))
@@ -98,6 +100,7 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
                     elif not all_results:
                         empty_streak += 1
                         if empty_streak >= TELEGRAM_EMPTY_DIALOG_STREAK and pending:
+                            stop_event.set()
                             cancelled += len(pending)
                             await self._cancel_pending_dialog_searches(pending)
                             return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {
@@ -106,9 +109,10 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
                                 "empty_early_stop": empty_streak,
                             }
                     if len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
+                        stop_event.set()
                         cancelled += len(pending)
                         await self._cancel_pending_dialog_searches(pending)
-                        return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {"extract_ms": extract_ms_total, "cancelled": cancelled}
+                        return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {"extract_ms": extract_ms_total, "cancelled": cancelled, "target_early_stop": 1}
                 if budget.exhausted() or len(all_results) >= TELEGRAM_HISTORY_MAX_RESULTS:
                     break
         finally:

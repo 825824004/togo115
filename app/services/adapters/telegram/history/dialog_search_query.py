@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import time
@@ -7,6 +7,11 @@ from typing import Any
 from telethon import TelegramClient
 
 from app.db import add_log
+from app.services.adapters.telegram.history.dialog_rank import note_dialog_latency
+from app.services.adapters.telegram.history.query_result_cache import (
+    get_cached_query_results,
+    set_cached_query_results,
+)
 from app.services.link import (
     TELEGRAM_HISTORY_MAX_RESULTS,
     context_for_115_link,
@@ -20,6 +25,9 @@ from app.services.adapters.telegram.pipeline import TelegramPipelineStats
 from app.services.adapters.telegram.rate_limit import telegram_request_gate
 from app.services.adapters.telegram.scan.extract_cache import extract_cache_stats
 from app.services.types import SearchResult
+
+
+BODY_ONLY_PARALLEL = 3
 
 
 def _elapsed_ms(start: float) -> int:
@@ -37,6 +45,7 @@ class TelegramDialogSearchQueryMixin:
         *,
         incremental: bool = False,
         shared_state: TelegramSearchSharedState | None = None,
+        stop_event: asyncio.Event | None = None,
     ) -> tuple[list[SearchResult], int]:
         started = time.perf_counter()
         entity = dialog["entity"]
@@ -50,15 +59,20 @@ class TelegramDialogSearchQueryMixin:
         recent_ms = 0
         server_ms = 0
         # Non-incremental: prefer server search first. Recent scan is only a fallback.
-        if not incremental and not budget.exhausted():
+        if not incremental and not budget.exhausted() and not (stop_event is not None and stop_event.is_set()):
             server_started = time.perf_counter()
             for query in self._server_search_queries(queries):
                 if budget.exhausted() or len(results) >= TELEGRAM_HISTORY_MAX_RESULTS:
+                    break
+                if stop_event is not None and stop_event.is_set():
                     break
                 hits = await self._search_dialog_query(
                     client, entity, source, query, options, budget, seen_messages, stats, shared_state=state
                 )
                 results.extend(hits)
+                # First successful server query is enough for this dialog.
+                if hits:
+                    break
             server_ms = _elapsed_ms(server_started)
             if results:
                 add_log(
@@ -68,7 +82,7 @@ class TelegramDialogSearchQueryMixin:
                     {"dialog": source, "links": len(results), "server_ms": server_ms},
                 )
 
-        if not results and not budget.exhausted():
+        if not results and not budget.exhausted() and not (stop_event is not None and stop_event.is_set()):
             recent_started = time.perf_counter()
             recent_hits = await self._scan_recent_messages(
                 client,
@@ -101,6 +115,7 @@ class TelegramDialogSearchQueryMixin:
             "Telegram 来源搜索完成",
             {"dialog": source, **stats, "recent_ms": recent_ms, "server_ms": server_ms, "extract_ms": extract_ms, "total_ms": total_ms, "remaining_budget": round(budget.remaining, 2)},
         )
+        note_dialog_latency(source, total_ms, had_hits=bool(results))
         return results, extract_ms
 
     def _message_suggests_resource_links(self, message: Any) -> bool:
@@ -185,6 +200,12 @@ class TelegramDialogSearchQueryMixin:
             if cached is not None:
                 stats["cache_hits"] = int(stats.get("cache_hits", 0) or 0) + 1
                 return list(cached)
+        process_cached = get_cached_query_results(source, query)
+        if process_cached is not None:
+            stats["cache_hits"] = int(stats.get("cache_hits", 0) or 0) + 1
+            if state is not None:
+                state.set_cached_query_dialog_results(source, query, process_cached)
+            return list(process_cached)
         try:
             async with asyncio.timeout(timeout):
                 read_started = time.perf_counter()
@@ -195,16 +216,54 @@ class TelegramDialogSearchQueryMixin:
                 extract_started = time.perf_counter()
                 # Deep extract (neighbor/button pipeline) only on top-N ranked messages with link hints.
                 deep_budget = min(len(messages), max(2, min(4, int(options.messages_per_query or 4))))
+                body_batch: list[Any] = []
+
+                async def flush_body_batch() -> None:
+                    nonlocal results
+                    if not body_batch:
+                        return
+                    chunk = list(body_batch)
+                    body_batch.clear()
+                    # Concurrent body-only extract with isolated seen sets, then merge in order.
+                    gathered = await asyncio.gather(
+                        *[
+                            self._body_only_extract_message_links(
+                                source,
+                                message,
+                                query,
+                                set(),
+                                TelegramPipelineStats(),
+                            )
+                            for message in chunk
+                        ]
+                    )
+                    for message, links in zip(chunk, gathered):
+                        try:
+                            mid = int(getattr(message, "id", 0) or 0)
+                        except (TypeError, ValueError):
+                            mid = 0
+                        if mid and mid in seen_messages:
+                            pipeline_stats.duplicate_messages += 1
+                            continue
+                        if not links:
+                            pipeline_stats.no_link += 1
+                            continue
+                        if mid:
+                            seen_messages.add(mid)
+                        pipeline_stats.extracted_links += len(links)
+                        results.extend(links)
+
                 for index, message in enumerate(messages):
                     processed += 1
                     stats["searched"] += 1
                     pipeline_stats.title_matched += 1
                     if index >= deep_budget and results:
                         break
-                    if index >= deep_budget and index >= deep_budget + 2:
+                    if index >= deep_budget and index >= deep_budget + 2 and not body_batch:
                         break
                     suggests = self._message_suggests_resource_links(message)
                     if index < deep_budget and suggests:
+                        await flush_body_batch()
                         links = await self._pipeline_extract_message_links(
                             client,
                             entity,
@@ -216,17 +275,14 @@ class TelegramDialogSearchQueryMixin:
                             pipeline_stats,
                             stage="server_search",
                         )
+                        results.extend(links)
                     else:
-                        links = await self._body_only_extract_message_links(
-                            source,
-                            message,
-                            query,
-                            seen_messages,
-                            pipeline_stats,
-                        )
-                    results.extend(links)
+                        body_batch.append(message)
+                        if len(body_batch) >= BODY_ONLY_PARALLEL:
+                            await flush_body_batch()
                     if processed >= options.messages_per_query or len(results) >= TELEGRAM_HISTORY_MAX_RESULTS:
                         break
+                await flush_body_batch()
                 extract_ms = _elapsed_ms(extract_started)
         except asyncio.TimeoutError:
             stats["timeouts"] += 1
@@ -245,4 +301,5 @@ class TelegramDialogSearchQueryMixin:
         stats["pipeline_skipped_no_link_hint"] = stats.get("pipeline_skipped_no_link_hint", 0) + pipeline_stats.skipped_no_link_hint
         if state is not None:
             state.set_cached_query_dialog_results(source, query, results)
+        set_cached_query_results(source, query, results)
         return results

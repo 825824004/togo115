@@ -13,10 +13,10 @@ from app.services.adapters.telegram.scan.message_index import index_telegram_mes
 from app.services.search_metrics import record_prewarm
 
 
-TELEGRAM_INDEX_PREWARM_LIMIT = 60
+TELEGRAM_INDEX_PREWARM_LIMIT = 80
 TELEGRAM_INDEX_PREWARM_DIALOG_CONCURRENCY = 3
 # When a source is already warm, only pull a small recent window to catch new posts.
-TELEGRAM_INDEX_PREWARM_DELTA_LIMIT = 30
+TELEGRAM_INDEX_PREWARM_DELTA_LIMIT = 40
 
 
 class TelegramIndexPrewarmMixin:
@@ -44,6 +44,14 @@ class TelegramIndexPrewarmMixin:
         if not dialogs:
             return {"sources": len(source_values), "indexed": 0, "dialogs": 0, "skipped_warm": 0}
 
+        # Prefer cold sources first so index miss rate drops faster.
+        dialogs = sorted(
+            dialogs,
+            key=lambda d: (
+                0 if max_indexed_message_id(str(d.get("canonical") or d.get("source") or "")) <= 0 else 1,
+                str(d.get("canonical") or d.get("source") or ""),
+            ),
+        )
         semaphore = runtime.telegram_dialog_search_semaphore()
         total_indexed = 0
         skipped_warm = 0

@@ -96,7 +96,7 @@ class TelegramHistorySearchMixin(TelegramDialogSearchMixin, TelegramFastSearchMi
             )
         budget = TelegramSearchBudget(options.total_budget)
         add_log(
-            "info",
+            "debug",
             "telegram",
             "Telegram 历史搜索开始",
             {
