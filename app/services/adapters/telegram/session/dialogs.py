@@ -10,8 +10,8 @@ from app.db import add_log
 from app.services.adapters.telegram.session.dialog_keys import TelegramDialogKeysMixin
 from app.services.adapters.telegram.session.dialog_store import load_dialog_entity_rows
 
-TELEGRAM_DIALOG_CACHE_TTL_SECONDS = 300
-TELEGRAM_DIALOG_NEGATIVE_TTL_SECONDS = 90
+TELEGRAM_DIALOG_CACHE_TTL_SECONDS = 900
+TELEGRAM_DIALOG_NEGATIVE_TTL_SECONDS = 180
 
 
 class TelegramDialogsMixin(TelegramDialogKeysMixin):

@@ -1,7 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import unittest
 from typing import Any
+from unittest.mock import patch
 
 from app.services.adapters.telegram.session.dialogs import TelegramDialogsMixin
 
@@ -39,11 +40,16 @@ class DialogResolver(TelegramDialogsMixin):
 
 
 class TelegramDialogsTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        TelegramDialogsMixin._dialog_entity_map_cache = {}
+        TelegramDialogsMixin._dialog_entity_map_cache_at = {}
+        TelegramDialogsMixin._dialog_negative_cache = {}
+
     async def test_resolve_dialogs_prefers_cached_dialog_entity_for_peer_id(self) -> None:
         resolver = DialogResolver()
         client = FakeClient()
-
-        dialogs = await resolver._resolve_dialogs(client, ["-1001234567890"])
+        with patch("app.services.adapters.telegram.session.dialogs.load_dialog_entity_rows", return_value=[]):
+            dialogs = await resolver._resolve_dialogs(client, ["-1001234567890"])
 
         self.assertEqual(len(dialogs), 1)
         self.assertIsInstance(dialogs[0]["entity"], FakeEntity)
@@ -53,8 +59,8 @@ class TelegramDialogsTest(unittest.IsolatedAsyncioTestCase):
     async def test_resolve_dialogs_matches_username_without_at_prefix(self) -> None:
         resolver = DialogResolver()
         client = FakeClient()
-
-        dialogs = await resolver._resolve_dialogs(client, ["@DramaChannel"])
+        with patch("app.services.adapters.telegram.session.dialogs.load_dialog_entity_rows", return_value=[]):
+            dialogs = await resolver._resolve_dialogs(client, ["@DramaChannel"])
 
         self.assertEqual(len(dialogs), 1)
         self.assertIsInstance(dialogs[0]["entity"], FakeEntity)
@@ -63,9 +69,9 @@ class TelegramDialogsTest(unittest.IsolatedAsyncioTestCase):
     async def test_resolve_dialogs_reuses_entity_map_cache_for_same_client(self) -> None:
         resolver = DialogResolver()
         client = FakeClient()
-
-        first = await resolver._resolve_dialogs(client, ["-1001234567890"])
-        second = await resolver._resolve_dialogs(client, ["@DramaChannel"])
+        with patch("app.services.adapters.telegram.session.dialogs.load_dialog_entity_rows", return_value=[]):
+            first = await resolver._resolve_dialogs(client, ["-1001234567890"])
+            second = await resolver._resolve_dialogs(client, ["@DramaChannel"])
 
         self.assertEqual(len(first), 1)
         self.assertEqual(len(second), 1)
@@ -90,9 +96,12 @@ class PersistentCacheClient:
 
 
 class TelegramDialogPersistentCacheTest(unittest.IsolatedAsyncioTestCase):
-    async def test_resolve_dialogs_uses_persistent_cache_when_map_misses(self) -> None:
-        from unittest.mock import patch
+    def setUp(self) -> None:
+        TelegramDialogsMixin._dialog_entity_map_cache = {}
+        TelegramDialogsMixin._dialog_entity_map_cache_at = {}
+        TelegramDialogsMixin._dialog_negative_cache = {}
 
+    async def test_resolve_dialogs_uses_persistent_cache_when_map_misses(self) -> None:
         resolver = DialogResolver()
         client = PersistentCacheClient()
         rows = [
@@ -111,7 +120,8 @@ class TelegramDialogPersistentCacheTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(dialogs), 1)
         self.assertIsInstance(dialogs[0]["entity"], FakeEntity)
-        self.assertEqual(client.iter_dialog_calls, 1)
+        # Persistent hit should skip cold iter_dialogs entirely.
+        self.assertEqual(client.iter_dialog_calls, 0)
         self.assertTrue(client.get_entity_calls)
 
 

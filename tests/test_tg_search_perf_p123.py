@@ -76,8 +76,8 @@ class AdaptiveMessagesTest(unittest.TestCase):
 
 class PrewarmFreshnessTest(unittest.TestCase):
     def test_prewarm_limits_raised(self) -> None:
-        self.assertEqual(TELEGRAM_INDEX_PREWARM_LIMIT, 60)
-        self.assertEqual(TELEGRAM_INDEX_PREWARM_DELTA_LIMIT, 30)
+        self.assertEqual(TELEGRAM_INDEX_PREWARM_LIMIT, 80)
+        self.assertEqual(TELEGRAM_INDEX_PREWARM_DELTA_LIMIT, 40)
 
     def test_server_search_query_limit_still_two(self) -> None:
         queries = server_search_queries(["Alpha 2024", "Alpha", "Beta 2024", "Gamma"], limit=2)
@@ -218,10 +218,120 @@ class IndexAgePruneTest(unittest.TestCase):
             prune_old_index_rows,
         )
 
-        self.assertEqual(TELEGRAM_INDEX_MAX_AGE_DAYS, 21)
+        self.assertEqual(TELEGRAM_INDEX_MAX_AGE_DAYS, 28)
         # No table / empty DB should not raise.
         deleted = prune_old_index_rows(max_age_days=21)
         self.assertIsInstance(deleted, int)
+
+
+
+class ProcessQueryCacheTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from app.services.adapters.telegram.history.query_result_cache import clear_query_result_cache
+        clear_query_result_cache()
+
+    def tearDown(self) -> None:
+        from app.services.adapters.telegram.history.query_result_cache import clear_query_result_cache
+        clear_query_result_cache()
+
+    def test_positive_and_negative_cache(self) -> None:
+        from app.services.adapters.telegram.history.query_result_cache import (
+            get_cached_query_results,
+            set_cached_query_results,
+        )
+        hits = [SearchResult(title="t", url="https://115.com/s/x", source="src")]
+        set_cached_query_results("src", "q", hits)
+        cached = get_cached_query_results("src", "q")
+        self.assertEqual(len(cached or []), 1)
+        set_cached_query_results("src", "empty", [])
+        empty = get_cached_query_results("src", "empty")
+        self.assertIsNotNone(empty)
+        self.assertEqual(empty, [])
+
+
+class DialogCooldownRankTest(unittest.TestCase):
+    def setUp(self) -> None:
+        clear_process_dialog_hit_scores()
+
+    def tearDown(self) -> None:
+        clear_process_dialog_hit_scores()
+
+    def test_slow_dialog_demoted(self) -> None:
+        from app.services.adapters.telegram.history.dialog_rank import note_dialog_latency, rank_dialogs
+        note_dialog_hit("fast", 1)
+        note_dialog_latency("slow", 4000, had_hits=False)
+        ranked = rank_dialogs([{"canonical": "slow"}, {"canonical": "fast"}])
+        self.assertEqual([d["canonical"] for d in ranked], ["fast", "slow"])
+
+
+class FirstQueryEarlyStopTest(unittest.IsolatedAsyncioTestCase):
+    async def test_skips_second_query_when_first_hits(self) -> None:
+        class Harness(TelegramDialogSearchQueryMixin):
+            def __init__(self) -> None:
+                self.queries: list[str] = []
+
+            def _server_search_queries(self, queries):
+                return ["q1", "q2"]
+
+            async def _search_dialog_query(self, client, entity, source, query, options, budget, seen_messages, stats, *, shared_state=None):
+                self.queries.append(query)
+                if query == "q1":
+                    return [SearchResult(title="t", url="https://115.com/s/a", source=source)]
+                return []
+
+            async def _scan_recent_messages(self, *args, **kwargs):
+                raise AssertionError("recent should not run when server hits")
+
+        harness = Harness()
+        options = TelegramHistoryOptions(20, 20, 4, 3.0, 1.0, 1.0)
+        budget = TelegramSearchBudget(3.0)
+        hits, _ = await harness._search_dialog_history(
+            object(),
+            {"entity": object(), "canonical": "src"},
+            ["q1", "q2"],
+            options,
+            budget,
+        )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(harness.queries, ["q1"])
+
+
+class TargetEarlyStopTest(unittest.IsolatedAsyncioTestCase):
+    async def test_target_met_cancels_pending(self) -> None:
+        class Harness(TelegramDialogSearchMixin):
+            def __init__(self) -> None:
+                self.calls = 0
+
+            async def _search_dialog_history(self, *args, **kwargs):
+                self.calls += 1
+                await asyncio.sleep(0.02)
+                return [SearchResult(title="t", url=f"https://115.com/s/{self.calls}", source="d")], 5
+
+        harness = Harness()
+        dialogs = [{"canonical": f"d{i}", "entity": object(), "source": f"d{i}"} for i in range(6)]
+        options = TelegramHistoryOptions(20, 20, 4, 5.0, 1.0, 1.0)
+        budget = TelegramSearchBudget(5.0)
+        with patch("app.services.adapters.telegram.history.dialog_search.runtime.telegram_dialog_search_semaphore", return_value=asyncio.Semaphore(2)):
+            with patch("app.services.adapters.telegram.history.dialog_search.runtime.telegram_source_lock") as lock:
+                class _CM:
+                    async def __aenter__(self):
+                        return None
+                    async def __aexit__(self, *a):
+                        return False
+                lock.return_value = _CM()
+                with patch("app.services.adapters.telegram.history.dialog_search.telegram_request_gate") as gate:
+                    gate.wait = AsyncMock()
+                    gate.note_error = lambda *a, **k: None
+                    results, metrics = await harness._search_dialogs_concurrently(
+                        client=object(),
+                        dialogs=dialogs,
+                        queries=["q"],
+                        options=options,
+                        budget=budget,
+                    )
+        self.assertGreaterEqual(len(results), 1)
+        self.assertLess(harness.calls, 6)
+        self.assertEqual(int(metrics.get("target_early_stop") or 0), 1)
 
 
 if __name__ == "__main__":

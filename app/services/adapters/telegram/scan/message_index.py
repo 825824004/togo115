@@ -27,7 +27,7 @@ from app.services.types import SearchResult
 
 TELEGRAM_INDEX_WINDOW = 4
 TELEGRAM_INDEX_MAX_PER_SOURCE = 2500
-TELEGRAM_INDEX_MAX_AGE_DAYS = 21
+TELEGRAM_INDEX_MAX_AGE_DAYS = 28
 
 # Compatibility aliases used by tests/patches.
 _search_blob_for = search_blob_for

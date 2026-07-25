@@ -174,7 +174,7 @@ class SharedStateHarness(TelegramHistorySearchMixin):
     def _search_indexed_telegram_messages(self, dialogs, queries):
         return []
 
-    async def _search_dialog_history(self, client, dialog, queries, options, budget, *, incremental=False, shared_state=None):
+    async def _search_dialog_history(self, client, dialog, queries, options, budget, *, incremental=False, shared_state=None, stop_event=None, **kwargs):
         self.dialog_history_calls += 1
         return [SearchResult(title="shared", url="https://115.com/s/shared?password=1111", source=str(dialog["canonical"]), message_id="12")], 2
 
