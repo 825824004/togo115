@@ -77,7 +77,7 @@ async def search_subscription(subscription_id: int, user: dict = Depends(current
 
 @router.get("/api/resources")
 async def resources(
-    limit: int = Query(80, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: dict = Depends(current_user),
 ) -> list[dict]:

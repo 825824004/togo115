@@ -14,6 +14,7 @@ from app.services.magnet.constants import (
 )
 from app.services.magnet.ranking import _is_magnet_result, _rank_magnet_results, _result_score
 from app.services.magnet.search_queries import _fast_source_options
+from app.services.source_health import filter_ready_sources, note_source_failure, note_source_success, rank_sources_by_health
 
 
 async def _fetch_priority_sources_until_ranked(
@@ -28,16 +29,20 @@ async def _fetch_priority_sources_until_ranked(
 ) -> tuple[list[SearchResult], int, bool]:
     if not sources:
         return [], 0, False
+    sources = rank_sources_by_health(filter_ready_sources(sources))
     semaphore = asyncio.Semaphore(TG_BOT_MAGNET_SOURCE_CONCURRENCY)
     candidates: list[SearchResult] = []
     searched_sources = 0
 
     async def fetch(source: dict[str, Any]) -> tuple[dict[str, Any], list[SearchResult] | Exception]:
         async with semaphore:
+            started = time.perf_counter()
             try:
                 results = await adapter._fetch_source_for_queries(_fast_source_options(source), queries[:TG_BOT_MAGNET_SOURCE_QUERY_LIMIT])
+                note_source_success(source, (time.perf_counter() - started) * 1000)
                 return source, results
             except Exception as exc:
+                note_source_failure(source, timeout="timeout" in str(exc).casefold() or "Timeout" in type(exc).__name__)
                 return source, exc
 
     tasks = [asyncio.create_task(fetch(source)) for source in sources]
@@ -102,11 +107,19 @@ async def _cancel_pending_magnet_sources(pending: set[asyncio.Task]) -> None:
         await asyncio.gather(*pending, return_exceptions=True)
 
 async def _fetch_priority_sources(adapter: RssTorznabAdapter, sources: list[dict[str, Any]], queries: list[str]) -> list[list[SearchResult]]:
+    sources = rank_sources_by_health(filter_ready_sources(sources))
     semaphore = asyncio.Semaphore(TG_BOT_MAGNET_SOURCE_CONCURRENCY)
 
     async def fetch(source: dict[str, Any]) -> list[SearchResult]:
         async with semaphore:
-            return await adapter._fetch_source_for_queries(_fast_source_options(source), queries[:TG_BOT_MAGNET_SOURCE_QUERY_LIMIT])
+            started = time.perf_counter()
+            try:
+                results = await adapter._fetch_source_for_queries(_fast_source_options(source), queries[:TG_BOT_MAGNET_SOURCE_QUERY_LIMIT])
+                note_source_success(source, (time.perf_counter() - started) * 1000)
+                return results
+            except Exception:
+                note_source_failure(source, timeout=True)
+                raise
 
     responses = await asyncio.gather(*(fetch(source) for source in sources), return_exceptions=True)
     groups: list[list[SearchResult]] = []

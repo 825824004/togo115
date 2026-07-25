@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 """Background job worker for scheduled subscription tasks.
 
@@ -22,12 +22,24 @@ from app.services.jobs import (
 from app.services.search_metrics import record_job_event
 
 
+
 SUPPORTED_KINDS = (
     "subscription_search",
     "subscription_search_all",
     "emby_subscription_sync",
     "recheck_pending_115",
     "retry_failed_resources",
+)
+
+# Non-Telegram jobs can overlap; TG search kinds stay exclusive.
+NON_TG_KINDS = (
+    "emby_subscription_sync",
+    "recheck_pending_115",
+    "retry_failed_resources",
+)
+TG_KINDS = (
+    "subscription_search",
+    "subscription_search_all",
 )
 
 
@@ -69,7 +81,7 @@ class JobWorker:
                 if not job:
                     await asyncio.sleep(self.poll_seconds)
                     continue
-                await self._execute(job)
+                await self._execute_with_sidecars(job)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -80,6 +92,18 @@ class JobWorker:
                     {"error": str(exc), "error_type": type(exc).__name__},
                 )
                 await asyncio.sleep(self.poll_seconds)
+
+
+    async def _execute_with_sidecars(self, job: dict[str, Any]) -> None:
+        kind = str(job.get("kind") or "")
+        if kind in TG_KINDS:
+            await self._execute(job)
+            return
+        extra = claim_next_job(list(NON_TG_KINDS), worker_id=worker_instance_id())
+        if not extra or int(extra.get("id") or 0) == int(job.get("id") or 0):
+            await self._execute(job)
+            return
+        await asyncio.gather(self._execute(job), self._execute(extra))
 
     async def _execute(self, job: dict[str, Any]) -> None:
         job_id = int(job["id"])

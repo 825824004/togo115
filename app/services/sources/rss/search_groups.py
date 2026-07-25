@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from app.db import add_log
 from app.services.types import SearchResult
+from app.services.source_health import filter_ready_sources, note_source_failure, note_source_success, rank_sources_by_health
 
 
 RSS_SOURCE_CONCURRENCY = 3
@@ -38,6 +39,7 @@ class RssTorznabSearchGroupsMixin:
             add_log("debug", "rss", "没有启用的订阅源/磁力源，跳过搜索", {"title": title})
             return []
         # Compact queries for faster fallback; full expansion remains for exhaustive search_history.
+        sources = rank_sources_by_health(filter_ready_sources(sources))
         queries = self._priority_search_queries(title, keywords)
         groups: list[dict[str, Any]] = []
         state = _PrioritySearchState()
@@ -80,13 +82,16 @@ class RssTorznabSearchGroupsMixin:
 
         async def fetch_one(source: dict[str, Any]) -> tuple[dict[str, Any], list[SearchResult] | Exception]:
             async with semaphore:
+                started = asyncio.get_running_loop().time()
                 try:
                     if query_context:
                         results = await self._fetch_source_for_queries(source, queries, query_context)
                     else:
                         results = await self._fetch_source_for_queries(source, queries)
+                    note_source_success(source, (asyncio.get_running_loop().time() - started) * 1000)
                     return source, results
                 except Exception as exc:
+                    note_source_failure(source, timeout="timeout" in str(exc).casefold() or "Timeout" in type(exc).__name__)
                     return source, exc
 
         tasks = {asyncio.create_task(fetch_one(source)): source for source in sources}

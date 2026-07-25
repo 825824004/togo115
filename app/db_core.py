@@ -14,12 +14,13 @@ from app.config import settings
 
 PASSWORD_PREFIX = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 260_000
-SQLITE_CONNECT_TIMEOUT_SECONDS = 1.5
-SQLITE_BUSY_TIMEOUT_MS = 1500
+SQLITE_CONNECT_TIMEOUT_SECONDS = 3.0
+SQLITE_BUSY_TIMEOUT_MS = 3000
 SQLITE_LOCK_RETRIES = 3
 SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.05
 _db_lock = threading.RLock()
 _wal_initialized_paths: set[str] = set()
+_analyze_initialized_paths: set[str] = set()
 _T = TypeVar("_T")
 
 
@@ -94,6 +95,14 @@ def get_connection() -> sqlite3.Connection:
             if path_key not in _wal_initialized_paths:
                 conn.execute("PRAGMA journal_mode = WAL")
                 _wal_initialized_paths.add(path_key)
+    if path_key not in _analyze_initialized_paths:
+        with _db_lock:
+            if path_key not in _analyze_initialized_paths:
+                try:
+                    conn.execute("PRAGMA optimize")
+                except Exception:
+                    pass
+                _analyze_initialized_paths.add(path_key)
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA foreign_keys = ON")
     try:

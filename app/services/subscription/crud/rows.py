@@ -6,7 +6,7 @@ from app.db import db, json_loads, row_to_dict, utc_now
 from app.services.subscription.library.service import enrich_subscriptions_with_health, subscription_should_hide
 from app.services.subscription.match.matching import normalize_quality_rules, subscription_release_year
 
-SUBSCRIPTION_LIST_CACHE_TTL = 6.0
+SUBSCRIPTION_LIST_CACHE_TTL = 12.0
 _subscription_list_cache: dict[bool, tuple[float, list[dict]]] = {}
 
 
