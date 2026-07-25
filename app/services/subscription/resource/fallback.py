@@ -22,7 +22,7 @@ from app.services.subscription.match.matching import (
 
 def subscription_115_resources(conn: sqlite3.Connection, subscription_id: int) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "SELECT title, url, status FROM resources WHERE subscription_id = ? AND status NOT IN ('failed', 'pending_recheck', 'skipped') ORDER BY id DESC",
+        "SELECT title, url, status FROM resources WHERE subscription_id = ? AND status NOT IN ('failed', 'pending_recheck', 'skipped', 'link_invalid', 'delivery_failed_final', 'delivery_failed_retryable') ORDER BY id DESC",
         (subscription_id,),
     ).fetchall()
     return [row_to_dict(row) or {} for row in rows if PAN115_URL_RE.match(row["url"] or "")]
@@ -47,10 +47,15 @@ def fallback_blocked_by_primary_resource(
 
     result_episodes = episode_keys_from_text_for_subscription(subscription, result_text(result))
     if not result_episodes:
-        return True
+        # Unlabeled fallback packs should not be blocked by unlabeled primaries.
+        return False
     for item in existing_115:
+        status = str(item.get("status") or "").casefold()
+        if status in {"link_invalid", "delivery_failed_final", "delivery_failed_retryable", "failed", "skipped", "pending_recheck"}:
+            continue
         existing_episodes = episode_keys_from_text_for_subscription(subscription, str(item.get("title") or ""))
-        if not existing_episodes or result_episodes.issubset(existing_episodes):
+        # Only block when an existing labeled primary already covers this fallback pack.
+        if existing_episodes and result_episodes.issubset(existing_episodes):
             return True
     return False
 

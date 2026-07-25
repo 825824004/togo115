@@ -161,6 +161,10 @@ def _enrich_tv_subscription_with_library(subscription: dict, snapshot: dict[str,
     episodes = snapshot.get("episodes", [])
     match = next((item for item in series if _emby_item_matches(subscription, item)), None)
     series_id = str(match.get("Id") or "") if match else ""
+    if series_id:
+        indexed = snapshot.get("_episodes_by_series") or {}
+        if isinstance(indexed, dict) and series_id in indexed:
+            episodes = indexed.get(series_id) or []
     owned_episodes = _episodes_for_subscription(subscription, episodes, series_id)
     enriched = {**subscription, "emby_episodes": owned_episodes, "emby_episode_keys": [json_episode_key(key) for key in sorted(owned_episodes)]}
     if owned_episodes and len(owned_episodes) != int(subscription.get("emby_count") or 0):

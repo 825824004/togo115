@@ -294,7 +294,7 @@ async function refreshSubscriptionData() {
   state.failedTasks = failedTasks || [];
 }
 
-function scheduleSubscriptionSoftRefresh(delay = 5000) {
+function scheduleSubscriptionSoftRefresh(delay = 8000) {
   if (state.subscriptionRefreshTimer) clearTimeout(state.subscriptionRefreshTimer);
   state.subscriptionRefreshTimer = setTimeout(async () => {
     state.subscriptionRefreshTimer = null;

@@ -27,6 +27,22 @@ def reset_library_snapshot_cache() -> None:
     _emby_snapshot_cache = None
 
 
+def index_snapshot_episodes(snapshot: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    """Attach series->episodes map for O(series) library enrichment."""
+    if not isinstance(snapshot, dict) or snapshot is EMBY_SNAPSHOT_FAILED or "__failed__" in snapshot:
+        return snapshot
+    if snapshot.get("_episodes_by_series") is not None:
+        return snapshot
+    index: dict[str, list[dict[str, Any]]] = {}
+    for episode in snapshot.get("episodes") or []:
+        series_id = str(episode.get("SeriesId") or episode.get("ParentId") or "").strip()
+        if not series_id:
+            continue
+        index.setdefault(series_id, []).append(episode)
+    snapshot["_episodes_by_series"] = index
+    return snapshot
+
+
 def _snapshot_lock() -> asyncio.Lock:
     global _emby_snapshot_lock, _emby_snapshot_lock_loop
     loop_id = id(asyncio.get_running_loop())
@@ -47,9 +63,9 @@ def _cached_snapshot(*, allow_stale: bool) -> dict[str, list[dict[str, Any]]] | 
         return None
     age = _cache_age_seconds() or 0.0
     if age <= EMBY_SNAPSHOT_CACHE_TTL_SECONDS:
-        return _emby_snapshot_cache[1]
+        return index_snapshot_episodes(_emby_snapshot_cache[1])
     if allow_stale and age <= EMBY_SNAPSHOT_STALE_TTL_SECONDS:
-        return _emby_snapshot_cache[1]
+        return index_snapshot_episodes(_emby_snapshot_cache[1])
     return None
 
 
@@ -104,6 +120,7 @@ async def _refresh_library_snapshot(*, force: bool) -> dict[str, list[dict[str, 
         # Guard against accidental failed marker being cached.
         if "__failed__" in snapshot:
             raise RuntimeError("snapshot failed marker")
+        snapshot = index_snapshot_episodes(snapshot)
         _emby_snapshot_cache = (time.time(), snapshot)
         add_log(
             "info",
@@ -150,7 +167,7 @@ def _failed_or_stale(*, reason: str, detail: dict[str, Any]) -> dict[str, list[d
                 **detail,
             },
         )
-        return stale
+        return index_snapshot_episodes(stale) if isinstance(stale, dict) else stale
     message = "Emby 快照获取超时" if reason == "timeout" else "Emby 快照获取失败"
     add_log("warning", "emby", f"{message}，且无可用缓存", {"reason": reason, **detail})
     return EMBY_SNAPSHOT_FAILED

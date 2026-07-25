@@ -57,7 +57,15 @@ def _episode_matches_subscription(subscription: dict, episode: dict, matched_ser
 
 def _episodes_for_subscription(subscription: dict, episodes: list[dict], matched_series_id: str = "") -> set[tuple[int, int]]:
     owned: set[tuple[int, int]] = set()
-    for episode in episodes:
+    scoped = episodes
+    if matched_series_id:
+        series_key = str(matched_series_id)
+        scoped = [
+            episode
+            for episode in episodes
+            if str(episode.get("SeriesId") or episode.get("ParentId") or "") == series_key
+        ] or episodes
+    for episode in scoped:
         if not _episode_matches_subscription(subscription, episode, matched_series_id):
             continue
         key = _episode_key_from_item(episode)
