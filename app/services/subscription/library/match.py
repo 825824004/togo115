@@ -14,6 +14,8 @@ from app.services.subscription.episode.parser import (
 from app.services.subscription.match.matching import (
     compact_match_text,
     _result_is_primary_115_resource,
+    _result_has_subscription_tmdb_id,
+    _result_is_site_plugin,
     result_text,
 )
 
@@ -143,6 +145,8 @@ def result_matches_missing_episodes(subscription: dict, result: SearchResult, *e
     # Bare title with no episode/pack labels: only Telegram primary 115 may pass as
     # last-resort. Haisou/site plugins must carry pack/episode markers (e.g. 全41集).
     if missing and _result_is_primary_115_resource(result):
+        return True
+    if missing and _result_is_site_plugin(result) and _result_has_subscription_tmdb_id(subscription, text):
         return True
     return False
 

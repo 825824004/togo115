@@ -343,6 +343,26 @@ class SubscriptionMatchingTest(unittest.TestCase):
         self.assertTrue(result_matches_subscription(subscription, result))
         self.assertTrue(result_matches_missing_episodes(subscription, result))
 
+    def test_haisou_tmdb_result_without_episode_marker_can_attach_for_missing_tv(self) -> None:
+        subscription = {
+            "title": "金特务：本色回归",
+            "media_type": "tv",
+            "tmdb_id": 296206,
+            "release_year": 2026,
+            "keywords": [],
+            "tmdb_total_count": 8,
+            "emby_episode_keys": ["1x1", "1x2"],
+        }
+        result = SearchResult(
+            title="金特务：本色回归 (2026) {tmdb-296206}",
+            url="https://115.com/s/haisoucode?password=8888",
+            source="site_plugin:海搜 Haisou",
+            context="金特务：本色回归 (2026) {tmdb-296206}\nhttps://115.com/s/haisoucode?password=8888",
+        )
+
+        self.assertTrue(result_matches_subscription(subscription, result))
+        self.assertTrue(result_matches_missing_episodes(subscription, result))
+
     def test_quality_rules_reject_excluded_words_and_pack_mode(self) -> None:
         subscription = {
             "title": "南部档案",

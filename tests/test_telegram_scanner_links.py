@@ -62,6 +62,22 @@ class TelegramScannerLinksTest(unittest.IsolatedAsyncioTestCase):
         second = next(item for item in results if item.url.endswith("second?password=2222"))
         self.assertEqual(second.title, "\u540e\u5ba4 2026")
 
+    async def test_links_from_message_restores_query_title_when_link_window_is_metadata(self) -> None:
+        scanner = TelegramMessageScanner()
+        text = "\n".join(
+            [
+                "金特务：本色回归 (2026)",
+                "地区：China",
+                "https://115cdn.com/s/demo?password=8888",
+            ]
+        )
+
+        results = await scanner._links_from_message(None, Message(text, 88), "telegram:query-restore", match_queries=["金特务"])
+
+        self.assertEqual(len(results), 1)
+        self.assertIn("金特务", results[0].title)
+        self.assertIn("金特务", results[0].context)
+
     def test_external_resource_page_urls_are_deduped_and_host_limited(self) -> None:
         scanner = TelegramMessageScanner()
 

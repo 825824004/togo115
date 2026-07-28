@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import time
@@ -20,6 +20,8 @@ from app.services.link import (
     telegram_message_text,
     text_has_external_resource_page_hint,
 )
+from app.services.adapters.telegram.scan.message_links_filter import _restore_query_title_context
+from app.services.adapters.telegram.scan.message_titles import _telegram_resource_title
 from app.services.adapters.telegram.models import TelegramHistoryOptions, TelegramSearchBudget, TelegramSearchSharedState
 from app.services.adapters.telegram.pipeline import TelegramPipelineStats
 from app.services.adapters.telegram.rate_limit import telegram_request_gate
@@ -160,9 +162,10 @@ class TelegramDialogSearchQueryMixin:
         hits: list[SearchResult] = []
         for url in urls:
             scoped = context_for_115_link(text, url, max(len(urls), 2)) if "115" in url else text
+            scoped = _restore_query_title_context(text, scoped, [query]) if "115" in url else scoped
             hits.append(
                 SearchResult(
-                    title=(scoped.splitlines()[0][:120] if scoped else query) or query,
+                    title=(_telegram_resource_title(scoped) if "115" in url else (scoped.splitlines()[0][:120] if scoped else query)) or query,
                     url=url,
                     source=source,
                     message_id=str(message_id or "") or None,

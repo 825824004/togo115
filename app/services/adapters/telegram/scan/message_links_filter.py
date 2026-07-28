@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.services.adapters.telegram.scan.extract_cache import set_cached_message_extract
-from app.services.link import context_for_115_link, local_text_matches_query
+from app.services.link import context_for_115_link, extract_115_links, local_text_matches_query
 from app.services.types import SearchResult
 from app.services.adapters.telegram.scan.message_titles import _enrich_title_with_episode_marker, _telegram_resource_title
 
@@ -36,6 +37,7 @@ class TelegramMessageLinkFilterMixin:
         filtered: dict[str, str] = {}
         for link, context in link_contexts.items():
             scoped = context_for_115_link(context, link, max(len(link_contexts), 2)) or context
+            scoped = _restore_query_title_context(context, scoped, match_queries)
             title = _telegram_resource_title(scoped)
             if not any(local_text_matches_query(scoped, query) for query in match_queries):
                 continue
@@ -75,3 +77,30 @@ class TelegramMessageLinkFilterMixin:
             )
             for link, context in link_contexts.items()
         ]
+
+
+CONTEXT_TITLE_NOISE_RE = re.compile(
+    r"(?:地区|国家|标签|简介|主演|评分|类型|分类|大小|质量|语言|字幕|TMDB\s*ID|链接|提取码|访问码|密码)",
+    re.I,
+)
+
+
+def _restore_query_title_context(context: str, scoped: str, match_queries: list[str] | None) -> str:
+    if not match_queries or any(local_text_matches_query(scoped, query) for query in match_queries):
+        return scoped
+    title = _query_title_line(context, match_queries)
+    if not title:
+        return scoped
+    if title in scoped:
+        return scoped
+    return f"{title}\n{scoped}".strip()
+
+
+def _query_title_line(context: str, match_queries: list[str]) -> str:
+    for line in str(context or "").splitlines():
+        value = line.strip()
+        if not value or extract_115_links(value) or CONTEXT_TITLE_NOISE_RE.search(value):
+            continue
+        if any(local_text_matches_query(value, query) for query in match_queries):
+            return value[:160]
+    return ""
