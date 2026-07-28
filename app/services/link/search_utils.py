@@ -68,6 +68,22 @@ def _query_without_year(value: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+
+def _title_delimiter_aliases(value: str | None) -> list[str]:
+    """Split title/subtitle forms into searchable aliases."""
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    if not text:
+        return []
+    aliases: list[str] = []
+    delimiter_re = r"[\uFF1A:\uFF5C\|·\u30FB•\u2014\u2013\-]+"
+    trim_chars = " \u300A\u300B<>\u300C\u300D\u300E\u300F\"'\u201C\u201D\u2018\u2019()\uFF08\uFF09[]\u3010\u3011"
+    for raw_part in re.split(delimiter_re, text):
+        part = raw_part.strip(trim_chars)
+        if len(part) >= 2 and part not in aliases:
+            aliases.append(part)
+    return aliases
+
+
 def _search_title_variants(title: str | None) -> list[str]:
     raw = re.sub(r"\s+", " ", str(title or "").strip())
     if not raw:
@@ -87,6 +103,10 @@ def _search_title_variants(title: str | None) -> list[str]:
         add(base)
         if base not in bases:
             bases.append(base)
+        for part in _title_delimiter_aliases(base):
+            add(part)
+            if part not in bases:
+                bases.append(part)
     for alias in title_prefix_aliases(raw):
         years = sorted(years_from_text(alias))
         base = _query_without_year(alias) or alias
@@ -146,5 +166,4 @@ def _local_text_matches_query(text: str | None, query: str | None) -> bool:
         if parts and all(_compact_search_text(part) in compact_text for part in parts):
             return True
     return False
-
 

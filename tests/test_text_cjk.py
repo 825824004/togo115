@@ -27,6 +27,12 @@ def test_search_queries_include_prefix_stripped_alias() -> None:
     assert "攻壳机动队" in queries
 
 
+def test_search_queries_include_colon_title_alias() -> None:
+    queries = expanded_search_queries("金特务：本色回归 2026", [], max_queries=6)
+    assert "金特务" in queries
+    assert "本色回归" in queries
+
+
 def test_extra_search_keywords_include_prefix_stripped_alias() -> None:
     extras = extra_search_keywords({"title": "新攻壳机动队", "keywords": ["新攻壳机动队"]})
     assert "攻壳机动队" in extras
@@ -50,4 +56,12 @@ def test_server_search_queries_include_alias_when_limit_two() -> None:
 
     selected3 = server_search_queries(queries, limit=3)
     assert "攻壳机动队" in selected3
+
+
+def test_server_search_queries_include_colon_alias_for_tg_card_title() -> None:
+    from app.services.adapters.telegram.history.config import server_search_queries
+
+    queries = expanded_search_queries("金特务：本色回归 2026", [], max_queries=6)
+    selected = server_search_queries(queries, limit=2)
+    assert "金特务" in selected
 

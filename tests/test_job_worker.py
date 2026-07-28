@@ -87,6 +87,22 @@ class JobWorkerTest(unittest.IsolatedAsyncioTestCase):
         jobs = [j for j in list_jobs() if j.get("kind") == "retry_failed_resources"]
         self.assertEqual(len(jobs), 1)
 
+    def test_forced_search_all_supersedes_queued_non_force_job(self) -> None:
+        first = subscription_tasks.schedule_search_all_active_subscriptions()
+        second = subscription_tasks.schedule_search_all_active_subscriptions(force=True)
+
+        self.assertNotEqual(first.get("job_id"), second.get("job_id"))
+        jobs = [j for j in list_jobs() if j.get("kind") == "subscription_search_all"]
+        self.assertEqual(jobs[0]["payload"].get("force"), True)
+        self.assertEqual(jobs[1]["status"], "failed")
+
+    def test_forced_search_all_reuses_existing_force_job(self) -> None:
+        first = subscription_tasks.schedule_search_all_active_subscriptions(force=True)
+        second = subscription_tasks.schedule_search_all_active_subscriptions(force=True)
+
+        self.assertEqual(first.get("job_id"), second.get("job_id"))
+        self.assertTrue(second.get("reused"))
+
 
     def test_touch_heartbeat_and_stale_requeue(self) -> None:
         from app.services.jobs import claim_next_job, create_job, list_jobs, requeue_stale_running_jobs, touch_job_heartbeat

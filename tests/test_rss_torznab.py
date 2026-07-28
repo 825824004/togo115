@@ -1087,6 +1087,12 @@ class RssTorznabTest(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(queries), 2)
         self.assertTrue(any("南部档案" in item for item in queries))
 
+    def test_priority_search_queries_prefer_colon_title_alias(self) -> None:
+        adapter = RssTorznabAdapter()
+        queries = adapter._priority_search_queries("\u91d1\u7279\u52a1\uff1a\u672c\u8272\u56de\u5f52 2026", [])
+        self.assertIn("\u91d1\u7279\u52a1", queries)
+
+
     async def test_priority_wave_cancels_lower_priority_after_match(self) -> None:
         adapter = RssTorznabAdapter()
         config = {

@@ -152,6 +152,10 @@ def schedule_subscription_search(subscription_id: int) -> dict:
 
 
 def schedule_search_all_active_subscriptions(*, force: bool = False) -> dict:
+    if force:
+        forced = _schedule_forced_search_all()
+        if forced is not None:
+            return forced
     result = _reuse_or_create_job("subscription_search_all", payload={"force": bool(force)})
     if not result.get("reused"):
         add_log(
@@ -161,6 +165,35 @@ def schedule_search_all_active_subscriptions(*, force: bool = False) -> dict:
             {"job_id": result.get("job_id"), "force": bool(force)},
         )
     return result
+
+
+def _schedule_forced_search_all() -> dict[str, Any] | None:
+    existing = latest_job("subscription_search_all")
+    if existing and existing.get("status") in {"queued", "running"}:
+        payload = existing.get("payload") or {}
+        if bool(payload.get("force")):
+            return {
+                "ok": True,
+                "queued": existing.get("status") == "queued",
+                "running": True,
+                "job_id": existing.get("id"),
+                "reused": True,
+            }
+        if existing.get("status") == "queued":
+            try:
+                from app.services.jobs import mark_job_failed
+
+                mark_job_failed(int(existing["id"]), "superseded by manual force search-all")
+            except Exception:
+                pass
+    job_id = create_job("subscription_search_all", payload={"force": True})
+    add_log(
+        "info",
+        "subscription",
+        '搜索全部活跃订阅已加入后台队列',
+        {"job_id": job_id, "force": True, "reused": False},
+    )
+    return {"ok": True, "queued": True, "running": True, "job_id": job_id, "reused": False}
 
 
 def schedule_emby_subscription_sync() -> dict:
