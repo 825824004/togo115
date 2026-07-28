@@ -31,7 +31,7 @@ def store_recent_search_results(
     *,
     incremental_telegram: bool = False,
 ) -> None:
-    if results is None:
+    if not results:
         return
     if len(_recent) >= RECENT_SEARCH_MAX_ITEMS:
         # drop oldest ~25%

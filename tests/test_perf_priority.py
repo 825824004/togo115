@@ -27,8 +27,9 @@ class PerfPriorityTest(unittest.TestCase):
         self.assertEqual(snap["index"]["fts_hits"], 1)
         clear_metrics()
 
-    def test_prefer_incremental_still(self):
-        self.assertTrue(_prefer_incremental_telegram({"media_type": "movie"}))
+    def test_prefer_incremental_only_when_movie_in_library(self):
+        self.assertFalse(_prefer_incremental_telegram({"media_type": "movie", "in_library": False}))
+        self.assertTrue(_prefer_incremental_telegram({"media_type": "movie", "in_library": True}))
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,9 +37,19 @@ class PerfNextTest(unittest.TestCase):
         self.assertIn("hello", match)
         self.assertIn(" OR ", match)
 
-    def test_prefer_incremental_for_movie_and_checked_tv(self) -> None:
-        self.assertTrue(_prefer_incremental_telegram({"media_type": "movie"}))
-        self.assertTrue(_prefer_incremental_telegram({"media_type": "tv", "last_checked_at": "2026-01-01"}))
+    def test_prefer_incremental_only_when_no_resource_search_needed(self) -> None:
+        self.assertFalse(_prefer_incremental_telegram({"media_type": "movie", "in_library": False}))
+        self.assertTrue(_prefer_incremental_telegram({"media_type": "movie", "in_library": True}))
+        self.assertFalse(
+            _prefer_incremental_telegram(
+                {
+                    "media_type": "tv",
+                    "last_checked_at": "2026-01-01",
+                    "tmdb_total_count": 8,
+                    "emby_episode_keys": ["1x1"],
+                }
+            )
+        )
         self.assertFalse(_prefer_incremental_telegram({"media_type": "tv", "last_checked_at": ""}))
 
     def test_recent_resources_cache_hits(self) -> None:

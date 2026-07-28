@@ -50,7 +50,16 @@ def log_unmatched_fallback_groups(
         for result in unmatched_results(group_results, matched_results)
     ]
     reason_summary = skip_reason_summary(subscription, skipped_results)
-    add_log("debug", "subscription", _unmatched_message("订阅源/磁力", reason_summary), {"id": int(subscription["id"]), "skipped": skipped})
+    add_log(
+        "debug",
+        "subscription",
+        _unmatched_message("订阅源/磁力", reason_summary),
+        {
+            "id": int(subscription["id"]),
+            "skipped": skipped,
+            "samples": [_unmatched_sample(subscription, result) for result in skipped_results[:5]],
+        },
+    )
 
 
 def _unmatched_message(source_label: str, reason_summary: str) -> str:

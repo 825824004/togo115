@@ -25,6 +25,10 @@ class PerfHelpersTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hit, [{"id": 1}])
         self.assertIsNone(get_recent_search_results(9, incremental_telegram=True))
 
+    def test_empty_recent_search_result_is_not_cached(self) -> None:
+        store_recent_search_results(9, [], incremental_telegram=False)
+        self.assertIsNone(get_recent_search_results(9, incremental_telegram=False))
+
     async def test_availability_many_uses_bounded_probes(self) -> None:
         cache = Shared115ValidationCache(probe_concurrency=2)
         adapter = AsyncMock()

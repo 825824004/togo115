@@ -132,13 +132,17 @@ async def _sync_emby_in_background(subscriptions: list[dict], snapshot) -> None:
 
 
 def _prefer_incremental_telegram(subscription: dict) -> bool:
-    """Prefer incremental TG scan for movies / previously checked TV.
+    """Prefer incremental TG only when library state already has nothing specific missing."""
+    try:
+        from app.services.subscription.search.service import subscription_needs_resource_search
 
-    Full remote TG history remains available via single-sub search paths.
-    """
+        if subscription_needs_resource_search(subscription):
+            return False
+    except Exception:
+        return False
     media_type = str(subscription.get("media_type") or "").casefold()
     if media_type == "movie":
-        return True
+        return bool(subscription.get("in_library"))
     last_checked = str(subscription.get("last_checked_at") or "").strip()
     return bool(last_checked)
 
