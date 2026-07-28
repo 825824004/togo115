@@ -15,9 +15,13 @@ from app.services.subscription.library.snapshot import library_snapshot_or_none
 from app.services.subscription.search.schedule import filter_subscriptions_for_search_all
 
 
-async def search_all_active_subscriptions() -> dict:
+async def search_all_active_subscriptions(*, force: bool = False) -> dict:
     subscriptions = active_subscriptions()
-    subscriptions, skipped_recent = filter_subscriptions_for_search_all(list(subscriptions))
+    if force:
+        subscriptions = list(subscriptions)
+        skipped_recent = 0
+    else:
+        subscriptions, skipped_recent = filter_subscriptions_for_search_all(list(subscriptions))
     wave_size = runtime.search_all_wave_size()
     add_log(
         "info",
@@ -26,6 +30,7 @@ async def search_all_active_subscriptions() -> dict:
         {
             "active": len(subscriptions),
             "skipped_recent_complete": skipped_recent,
+            "force": force,
             "concurrency": runtime.SUBSCRIPTION_SEARCH_CONCURRENCY,
             "wave_size": wave_size,
             "desired_concurrency": runtime.desired_search_concurrency(),

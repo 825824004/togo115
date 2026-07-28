@@ -177,10 +177,12 @@ class JobWorker:
             from app.services.subscription.search.tasks import _default_search_all
             from app.services.subscription import runtime as runtime
 
+            payload = job.get("payload") or {}
+            force = bool(payload.get("force"))
             delay = float(getattr(runtime, "SEARCH_ALL_START_DELAY_SECONDS", 0) or 0)
             if delay > 0:
                 await asyncio.sleep(delay)
-            result = await _default_search_all()
+            result = await _default_search_all(force=force)
             return result if isinstance(result, dict) else {"ok": True}
         if kind == "emby_subscription_sync":
             from app.services.subscription.search.tasks import _default_emby_sync

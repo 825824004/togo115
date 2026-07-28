@@ -34,7 +34,14 @@ def resource_dedupe_key(url: str) -> tuple[str, str] | None:
 
 
 def resource_status_is_effective(status: str | None) -> bool:
-    return str(status or "pending").casefold() not in {"failed", "pending_recheck", "skipped"}
+    return str(status or "pending").casefold() not in {
+        "delivery_failed_final",
+        "delivery_failed_retryable",
+        "failed",
+        "link_invalid",
+        "pending_recheck",
+        "skipped",
+    }
 
 
 def existing_resource_rows(conn: sqlite3.Connection, subscription_id: int) -> list[dict[str, Any]]:

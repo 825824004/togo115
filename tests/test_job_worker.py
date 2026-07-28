@@ -44,10 +44,10 @@ class JobWorkerTest(unittest.IsolatedAsyncioTestCase):
     async def test_worker_executes_search_all_off_loop(self) -> None:
         done = {"value": False}
 
-        async def fake_search_all():
+        async def fake_search_all(*, force: bool = False):
             time.sleep(0.05)
             done["value"] = True
-            return {"ok": True, "searched": 1}
+            return {"ok": True, "searched": 1, "force": force}
 
         worker = JobWorker(poll_seconds=0.05)
         with patch.object(subscription_tasks, "_default_search_all", fake_search_all), patch(

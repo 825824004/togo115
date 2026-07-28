@@ -657,7 +657,7 @@ class SubscriptionSearchFlowTest(unittest.IsolatedAsyncioTestCase):
         with db() as conn:
             rows = conn.execute("SELECT url, status FROM resources ORDER BY id").fetchall()
         self.assertEqual([row["url"] for row in rows], [first.url, second.url])
-        self.assertEqual(rows[0]["status"], "skipped")
+        self.assertEqual(rows[0]["status"], "delivery_failed_retryable")
 
     def test_pan115_share_payload_recognizes_chinese_expired_messages(self) -> None:
         from app.services.adapters.pan115 import Pan115Adapter
@@ -850,9 +850,9 @@ class SubscriptionSearchFlowTest(unittest.IsolatedAsyncioTestCase):
         from app.services.jobs import list_jobs
         from app.services.job_worker import JobWorker
 
-        async def nonblocking_search_all():
+        async def nonblocking_search_all(*, force: bool = False):
             await asyncio.sleep(0.05)
-            return {"ok": True, "searched": 0}
+            return {"ok": True, "searched": 0, "force": force}
 
         worker = JobWorker(poll_seconds=0.05)
         with patch.object(runtime_module, "SEARCH_ALL_START_DELAY_SECONDS", 0), patch(
@@ -909,9 +909,9 @@ class SubscriptionSearchFlowTest(unittest.IsolatedAsyncioTestCase):
         from app.services.jobs import list_jobs
         from app.services.job_worker import JobWorker
 
-        async def blocking_search_all():
+        async def blocking_search_all(*, force: bool = False):
             time.sleep(0.08)
-            return {"ok": True}
+            return {"ok": True, "force": force}
 
         worker = JobWorker(poll_seconds=0.05)
         with patch.object(runtime_module, "SEARCH_ALL_START_DELAY_SECONDS", 0), patch(

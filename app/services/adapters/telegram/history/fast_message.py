@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from telethon import TelegramClient
@@ -8,16 +9,15 @@ from app.services.adapters.telegram.scan.extract_cache import (
     get_cached_message_extract,
     set_cached_message_extract,
 )
-from app.services.adapters.telegram.models import TelegramSearchBudget
-from app.services.adapters.telegram.pipeline import TelegramPipelineStats
 from app.services.link import (
-    TELEGRAM_BUTTON_CLICK_MAX_PER_MESSAGE,
-    TELEGRAM_BUTTON_CLICK_TIMEOUT_SECONDS,
+    context_for_115_link,
     extract_115_links,
-    local_text_matches_query,
     telegram_message_text,
 )
 from app.services.types import SearchResult
+
+TELEGRAM_FAST_NEIGHBOR_TIMEOUT_SECONDS = 0.45
+TELEGRAM_FAST_BUTTON_CLICK_TIMEOUT_SECONDS = 0.65
 
 
 class TelegramFastMessageMixin:

@@ -8,6 +8,7 @@ import httpx
 
 from app.config import settings
 from app.db import init_db
+from app.services.adapters.telegram.models import TelegramHistoryOptions, TelegramSearchBudget
 from app.services.integrations import RssTorznabAdapter, SearchResult, TelegramClientAdapter, TmdbAdapter, context_for_115_link, extract_download_links, telegram_message_text
 from app.services.adapters.telegram.scan.extract_cache import clear_extract_caches
 from app.services.subscription.match.matching import result_matches_subscription
@@ -621,6 +622,58 @@ class RssTorznabTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(results[0].url, "https://115.com/s/jiangye2026?password=8888")
         self.assertIn("将夜", results[0].context)
+
+    async def test_telegram_server_search_clicks_button_hint_beyond_top_deep_budget(self) -> None:
+        class Button:
+            text = "查看资源"
+            url = None
+            button = None
+
+        class Message:
+            def __init__(self, message_id: int, text: str, buttons=None) -> None:
+                self.id = message_id
+                self.raw_text = text
+                self.message = text
+                self.grouped_id = None
+                self.peer_id = "channel"
+                self.entities = []
+                self.buttons = buttons
+                self.media = None
+
+            async def click(self, row, col):
+                return "金特务：本色回归 (2026)\n链接：https://115.com/s/jintewu2026?password=8888"
+
+        class Client:
+            async def get_messages(self, peer, **kwargs):
+                return [
+                    Message(40, "金特务：本色回归 (2026) 预告"),
+                    Message(41, "金特务：本色回归 (2026) 海报"),
+                    Message(42, "金特务：本色回归 (2026) 简介"),
+                    Message(43, "金特务：本色回归 (2026) 字幕"),
+                    Message(44, "金特务：本色回归 (2026)\n点击查看资源", [[Button()]]),
+                ]
+
+        adapter = TelegramClientAdapter()
+        results = await adapter._search_dialog_query(
+            Client(),
+            "dialog",
+            "telegram:test",
+            "金特务",
+            TelegramHistoryOptions(
+                history_limit=8,
+                fallback_scan_limit=0,
+                messages_per_query=8,
+                total_budget=2,
+                query_budget=2,
+                recent_budget=0,
+            ),
+            TelegramSearchBudget(2),
+            set(),
+            {"searched": 0, "fallback": 0, "links": 0, "timeouts": 0, "skipped_no_link_hint": 0},
+        )
+
+        self.assertEqual(results[0].url, "https://115.com/s/jintewu2026?password=8888")
+        self.assertIn("金特务", results[0].context)
 
     async def test_telegram_history_search_falls_back_to_configured_recent_limit(self) -> None:
         class Message:

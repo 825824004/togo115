@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -54,6 +55,46 @@ class SearchOptimizationTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("search", started)
         # Search should have started before emby finished.
         self.assertLess(started.index("search"), started.index("emby_done"))
+
+    async def test_search_all_force_includes_recent_subscriptions(self) -> None:
+        started: list[int] = []
+        now = datetime.now(timezone.utc).isoformat()
+        subs = [
+            {"id": 1, "title": "野狗骨头", "status": "active", "last_checked_at": now},
+            {"id": 2, "title": "金特务", "status": "active", "last_checked_at": now},
+        ]
+
+        async def fast_search(sub, snapshot):
+            started.append(int(sub["id"]))
+            return (1, 0, 0)
+
+        with patch.object(search_all_module, "active_subscriptions", return_value=subs), \
+             patch.object(search_all_module, "library_snapshot_or_none", AsyncMock(return_value=None)), \
+             patch.object(search_all_module, "_search_one", side_effect=fast_search):
+            result = await search_all_module.search_all_active_subscriptions(force=True)
+
+        self.assertEqual(result["searched"], 2)
+        self.assertEqual(started, [1, 2])
+
+    async def test_search_all_default_skips_recent_subscriptions(self) -> None:
+        started: list[int] = []
+        now = datetime.now(timezone.utc).isoformat()
+        subs = [
+            {"id": 1, "title": "野狗骨头", "status": "active", "last_checked_at": now},
+            {"id": 2, "title": "金特务", "status": "active", "last_checked_at": now},
+        ]
+
+        async def fast_search(sub, snapshot):
+            started.append(int(sub["id"]))
+            return (1, 0, 0)
+
+        with patch.object(search_all_module, "active_subscriptions", return_value=subs), \
+             patch.object(search_all_module, "library_snapshot_or_none", AsyncMock(return_value=None)), \
+             patch.object(search_all_module, "_search_one", side_effect=fast_search):
+            result = await search_all_module.search_all_active_subscriptions()
+
+        self.assertEqual(result["searched"], 0)
+        self.assertEqual(started, [])
 
 
 

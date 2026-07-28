@@ -40,7 +40,7 @@ async def sync_subscription_emby_status(user: dict = Depends(current_user)) -> d
 
 @router.post("/api/subscriptions/search-all")
 async def search_all_subscriptions(user: dict = Depends(current_user)) -> dict:
-    return schedule_search_all_active_subscriptions()
+    return schedule_search_all_active_subscriptions(force=True)
 
 
 @router.post("/api/subscriptions/bulk-delete")

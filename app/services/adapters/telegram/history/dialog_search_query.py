@@ -216,6 +216,7 @@ class TelegramDialogSearchQueryMixin:
                 extract_started = time.perf_counter()
                 # Deep extract (neighbor/button pipeline) only on top-N ranked messages with link hints.
                 deep_budget = min(len(messages), max(2, min(4, int(options.messages_per_query or 4))))
+                button_deep_budget = min(len(messages), max(deep_budget, min(8, int(options.messages_per_query or 8))))
                 body_batch: list[Any] = []
 
                 async def flush_body_batch() -> None:
@@ -262,7 +263,9 @@ class TelegramDialogSearchQueryMixin:
                     if index >= deep_budget and index >= deep_budget + 2 and not body_batch:
                         break
                     suggests = self._message_suggests_resource_links(message)
-                    if index < deep_budget and suggests:
+                    button_hint = message_has_link_button_hint(message)
+                    should_deep_extract = suggests and (index < deep_budget or (button_hint and index < button_deep_budget))
+                    if should_deep_extract:
                         await flush_body_batch()
                         links = await self._pipeline_extract_message_links(
                             client,

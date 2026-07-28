@@ -40,10 +40,10 @@ async def _default_search(
     return results
 
 
-async def _default_search_all() -> dict:
+async def _default_search_all(*, force: bool = False) -> dict:
     from app.services.subscription.search.all import search_all_active_subscriptions
 
-    return await search_all_active_subscriptions()
+    return await search_all_active_subscriptions(force=force)
 
 
 async def _default_emby_sync() -> dict:
@@ -151,14 +151,14 @@ def schedule_subscription_search(subscription_id: int) -> dict:
     return result
 
 
-def schedule_search_all_active_subscriptions() -> dict:
-    result = _reuse_or_create_job("subscription_search_all")
+def schedule_search_all_active_subscriptions(*, force: bool = False) -> dict:
+    result = _reuse_or_create_job("subscription_search_all", payload={"force": bool(force)})
     if not result.get("reused"):
         add_log(
             "info",
             "subscription",
             '搜索全部活跃订阅已加入后台队列',
-            {"job_id": result.get("job_id")},
+            {"job_id": result.get("job_id"), "force": bool(force)},
         )
     return result
 

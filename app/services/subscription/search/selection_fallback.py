@@ -116,7 +116,7 @@ def _mark_candidate_delivery_failed_if_pending(resource_id: int, error: str | No
         conn.execute(
             """
             UPDATE resources
-            SET status = 'skipped',
+            SET status = 'delivery_failed_retryable',
                 last_error = COALESCE(?, last_error, '磁力投递失败，自动尝试下一候选'),
                 updated_at = ?
             WHERE id = ? AND status = 'pending'
