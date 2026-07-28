@@ -136,7 +136,7 @@ class MessageSuggestAndBodyExtractTest(unittest.IsolatedAsyncioTestCase):
 
 
 class EmptyEarlyStopTest(unittest.IsolatedAsyncioTestCase):
-    async def test_empty_streak_cancels_remaining(self) -> None:
+    async def test_empty_streak_no_longer_cancels_remaining(self) -> None:
         class Harness(TelegramDialogSearchMixin):
             def __init__(self) -> None:
                 self.calls = 0
@@ -144,6 +144,8 @@ class EmptyEarlyStopTest(unittest.IsolatedAsyncioTestCase):
             async def _search_dialog_history(self, *args, **kwargs):
                 self.calls += 1
                 await asyncio.sleep(0.01)
+                if self.calls == 8:
+                    return [SearchResult(title="late", url="https://115.com/s/late", source="d8")], 1
                 return [], 1
 
         harness = Harness()
@@ -175,9 +177,10 @@ class EmptyEarlyStopTest(unittest.IsolatedAsyncioTestCase):
                         options=options,
                         budget=budget,
                     )
-        self.assertEqual(results, [])
-        self.assertGreaterEqual(int(metrics.get("empty_early_stop") or 0), TELEGRAM_EMPTY_DIALOG_STREAK)
-        self.assertLess(harness.calls, 8)
+        self.assertEqual([result.url for result in results], ["https://115.com/s/late"])
+        self.assertEqual(int(metrics.get("empty_early_stop") or 0), 0)
+        self.assertEqual(metrics.get("searched_dialogs"), 8)
+        self.assertEqual(harness.calls, 8)
 
 
 class QueryCacheInDialogQueryTest(unittest.IsolatedAsyncioTestCase):
@@ -297,7 +300,7 @@ class FirstQueryEarlyStopTest(unittest.IsolatedAsyncioTestCase):
 
 
 class TargetEarlyStopTest(unittest.IsolatedAsyncioTestCase):
-    async def test_target_met_cancels_pending(self) -> None:
+    async def test_target_met_no_longer_cancels_pending(self) -> None:
         class Harness(TelegramDialogSearchMixin):
             def __init__(self) -> None:
                 self.calls = 0
@@ -330,8 +333,9 @@ class TargetEarlyStopTest(unittest.IsolatedAsyncioTestCase):
                         budget=budget,
                     )
         self.assertGreaterEqual(len(results), 1)
-        self.assertLess(harness.calls, 6)
-        self.assertEqual(int(metrics.get("target_early_stop") or 0), 1)
+        self.assertEqual(harness.calls, 6)
+        self.assertEqual(metrics.get("searched_dialogs"), 6)
+        self.assertEqual(int(metrics.get("target_early_stop") or 0), 0)
 
 
 if __name__ == "__main__":

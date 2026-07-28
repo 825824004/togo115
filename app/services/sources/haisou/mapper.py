@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -98,7 +99,52 @@ def _haisou_file_contexts(item: dict[str, Any], limit: int = 30) -> list[str]:
             add(value)
 
     walk(item)
+    inferred = _infer_episode_context(values)
+    if inferred:
+        values.insert(0, inferred)
     return values
+
+
+VIDEO_FILE_RE = re.compile(r"(?i)\.(?:mkv|mp4|ts|m2ts|avi|mov|wmv|flv|webm|rmvb|iso)$")
+EPISODE_FILE_RE = re.compile(
+    r"(?i)(?:^|[\s._\-\[\(])(?:s(?P<season>\d{1,2})[\s._-]*)?(?:e|ep)?(?P<episode>\d{1,3})(?:[\s._\-\]\)]|$)"
+)
+
+
+def _infer_episode_context(values: list[str]) -> str:
+    episodes = _episode_numbers_from_files(values)
+    if not episodes:
+        return ""
+    highest = max(episodes)
+    if highest < 2:
+        return ""
+    # Only synthesize a pack range when the file list looks continuous enough.
+    expected = set(range(1, highest + 1))
+    if len(episodes & expected) < min(highest, max(2, int(highest * 0.6))):
+        return ""
+    return f"S01E01-E{highest:02d}"
+
+
+def _episode_numbers_from_files(values: list[str]) -> set[int]:
+    episodes: set[int] = set()
+    for value in values:
+        name = str(value or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
+        if not name or not VIDEO_FILE_RE.search(name):
+            continue
+        stem = VIDEO_FILE_RE.sub("", name)
+        for match in EPISODE_FILE_RE.finditer(stem):
+            number = _safe_episode_number(match.group("episode"))
+            if number:
+                episodes.add(number)
+    return episodes
+
+
+def _safe_episode_number(value: Any) -> int:
+    try:
+        number = int(str(value or "").lstrip("0") or "0")
+    except ValueError:
+        return 0
+    return number if 0 < number <= 200 else 0
 
 
 def build_haisou_share_url(item: dict[str, Any]) -> str:

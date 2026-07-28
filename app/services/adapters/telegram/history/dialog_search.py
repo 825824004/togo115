@@ -33,91 +33,77 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
         incremental: bool = False,
         shared_state: TelegramSearchSharedState | None = None,
     ) -> tuple[list[SearchResult], dict[str, int]]:
-        semaphore = runtime.telegram_dialog_search_semaphore()
         all_results: list[SearchResult] = []
         state = shared_state or TelegramSearchSharedState()
-        stop_event = asyncio.Event()
         extract_ms_total = 0
-        cancelled = 0
-        empty_streak = 0
+        searched = 0
+        failed = 0
         ranked_dialogs = rank_dialogs(
             dialogs,
             preferred_sources=list(state.preferred_sources or []),
             hit_scores=dict(state.dialog_hit_scores or {}),
         )
+        for dialog in ranked_dialogs:
+            if budget.exhausted() or len(all_results) >= TELEGRAM_HISTORY_MAX_RESULTS:
+                break
+            try:
+                hits, dialog_extract_ms = await self._search_single_dialog_reliably(
+                    client,
+                    dialog,
+                    queries,
+                    options,
+                    budget,
+                    incremental=incremental,
+                    shared_state=state,
+                )
+            except Exception as exc:
+                failed += 1
+                telegram_request_gate.note_error(exc)
+                add_log(
+                    "warning",
+                    "telegram",
+                    "Telegram 来源搜索失败，已跳过单个来源",
+                    {"source": dialog.get("canonical") or dialog.get("source"), "error": str(exc), "error_type": type(exc).__name__},
+                )
+                continue
+            searched += 1
+            extract_ms_total += int(dialog_extract_ms or 0)
+            all_results.extend(hits)
+        return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {
+            "extract_ms": extract_ms_total,
+            "cancelled": 0,
+            "searched_dialogs": searched,
+            "failed_dialogs": failed,
+        }
 
-        async def search_one(dialog: dict[str, Any]) -> tuple[list[SearchResult], int]:
-            if budget.exhausted() or stop_event.is_set() or len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
-                return [], 0
-            source_key = str(dialog.get("canonical") or dialog.get("source") or "")
-            async with runtime.telegram_source_lock(source_key):
-                async with semaphore:
-                    if budget.exhausted() or stop_event.is_set() or len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
-                        return [], 0
-                    await telegram_request_gate.wait()
-                    hits, dialog_extract_ms = await self._search_dialog_history(
-                        client,
-                        dialog,
-                        queries,
-                        options,
-                        budget,
-                        incremental=incremental,
-                        shared_state=state,
-                        stop_event=stop_event,
-                    )
-                    if hits and source_key:
-                        state.note_dialog_hits(source_key, len(hits))
-                        note_dialog_hit(source_key, len(hits))
-                    return hits, dialog_extract_ms
-
-        tasks = [asyncio.create_task(search_one(dialog)) for dialog in ranked_dialogs]
-        pending: set[asyncio.Task] = set(tasks)
-        try:
-            while pending:
-                done, pending = await asyncio.wait(pending, timeout=budget.timeout(1.0), return_when=asyncio.FIRST_COMPLETED)
-                if not done:
-                    if budget.exhausted():
-                        break
-                    continue
-                for task in done:
-                    try:
-                        result = task.result()
-                    except asyncio.CancelledError:
-                        cancelled += 1
-                        continue
-                    except Exception as exc:
-                        telegram_request_gate.note_error(exc)
-                        add_log("warning", "telegram", "Telegram 来源并发搜索失败，已跳过单个来源", {"error": str(exc), "error_type": type(exc).__name__})
-                        continue
-                    if isinstance(result, tuple):
-                        hits, dialog_extract_ms = result
-                    else:
-                        hits, dialog_extract_ms = result, 0
-                    all_results.extend(hits)
-                    extract_ms_total += int(dialog_extract_ms or 0)
-                    if hits:
-                        empty_streak = 0
-                    elif not all_results:
-                        empty_streak += 1
-                        if empty_streak >= TELEGRAM_EMPTY_DIALOG_STREAK and pending:
-                            stop_event.set()
-                            cancelled += len(pending)
-                            await self._cancel_pending_dialog_searches(pending)
-                            return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {
-                                "extract_ms": extract_ms_total,
-                                "cancelled": cancelled,
-                                "empty_early_stop": empty_streak,
-                            }
-                    if len(all_results) >= TELEGRAM_HISTORY_RETURN_TARGET:
-                        stop_event.set()
-                        cancelled += len(pending)
-                        await self._cancel_pending_dialog_searches(pending)
-                        return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {"extract_ms": extract_ms_total, "cancelled": cancelled, "target_early_stop": 1}
-                if budget.exhausted() or len(all_results) >= TELEGRAM_HISTORY_MAX_RESULTS:
-                    break
-        finally:
-            await self._cancel_pending_dialog_searches(pending)
-        return all_results[:TELEGRAM_HISTORY_MAX_RESULTS], {"extract_ms": extract_ms_total, "cancelled": cancelled}
+    async def _search_single_dialog_reliably(
+        self,
+        client: TelegramClient,
+        dialog: dict[str, Any],
+        queries: list[str],
+        options: TelegramHistoryOptions,
+        budget: TelegramSearchBudget,
+        *,
+        incremental: bool,
+        shared_state: TelegramSearchSharedState,
+    ) -> tuple[list[SearchResult], int]:
+        source_key = str(dialog.get("canonical") or dialog.get("source") or "")
+        async with runtime.telegram_source_lock(source_key):
+            await telegram_request_gate.wait()
+            hits, dialog_extract_ms = await self._search_dialog_history(
+                client,
+                dialog,
+                queries,
+                options,
+                budget,
+                incremental=incremental,
+                shared_state=shared_state,
+                stop_event=None,
+            )
+        if hits and source_key:
+            shared_state.note_dialog_hits(source_key, len(hits))
+            note_dialog_hit(source_key, len(hits))
+        return hits, dialog_extract_ms
 
     async def _cancel_pending_dialog_searches(self, pending: set[asyncio.Task]) -> None:
         for task in pending:

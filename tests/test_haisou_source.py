@@ -67,6 +67,28 @@ class HaisouSourceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(mapped), 1)
         self.assertIn("S01E01-E08", mapped[0].context)
 
+    def test_mapper_infers_episode_pack_from_numbered_video_files(self) -> None:
+        mapped = map_haisou_items(
+            [
+                {
+                    "hsid": "a",
+                    "platform": "115",
+                    "title": "Gold Agent",
+                    "shareUrl": "https://115.com/s/abcDEF",
+                    "sharePwd": "xy",
+                    "files": {
+                        "items": [
+                            {"path": f"/Gold Agent/{episode:02d}.mkv"}
+                            for episode in range(1, 9)
+                        ]
+                    },
+                }
+            ]
+        )
+
+        self.assertEqual(len(mapped), 1)
+        self.assertIn("S01E01-E08", mapped[0].context)
+
     def test_build_url_from_share_code(self) -> None:
         url = build_haisou_share_url({"platform": "115", "shareCode": "code123", "sharePwd": "ab"})
         self.assertEqual(url, "https://115.com/s/code123?password=ab")
