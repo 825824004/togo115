@@ -324,6 +324,25 @@ class SubscriptionMatchingTest(unittest.TestCase):
         )
         self.assertTrue(result_matches_missing_episodes(subscription, haisou_pack))
 
+    def test_h_subtitle_main_title_alias_matches_haisou_pack_context(self) -> None:
+        subscription = {
+            "title": "金特务：本色回归",
+            "media_type": "tv",
+            "release_year": 2026,
+            "keywords": [],
+            "tmdb_total_count": 8,
+            "emby_episode_keys": [],
+        }
+        result = SearchResult(
+            title="金特务",
+            url="https://115.com/s/haisoucode?password=1234",
+            source="site_plugin:海搜 Haisou",
+            context="金特务\n金特务：本色回归 S01E01-E08 4K SDR",
+        )
+
+        self.assertTrue(result_matches_subscription(subscription, result))
+        self.assertTrue(result_matches_missing_episodes(subscription, result))
+
     def test_quality_rules_reject_excluded_words_and_pack_mode(self) -> None:
         subscription = {
             "title": "南部档案",

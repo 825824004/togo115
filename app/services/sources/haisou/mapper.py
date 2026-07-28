@@ -37,6 +37,7 @@ def map_haisou_items(
             f"size={raw.get('sizeBytes')}" if raw.get("sizeBytes") is not None else "",
             f"files={raw.get('fileCount')}" if raw.get("fileCount") is not None else "",
             f"hsid={raw.get('hsid')}" if raw.get("hsid") else "",
+            *_haisou_file_contexts(raw),
         ]
         context = "\n".join(part for part in context_parts if part)
         results.append(
@@ -49,6 +50,55 @@ def map_haisou_items(
             )
         )
     return results
+
+
+def _haisou_file_contexts(item: dict[str, Any], limit: int = 30) -> list[str]:
+    """Collect searchable filenames/paths from Haisou payload variants."""
+    values: list[str] = []
+    seen: set[str] = set()
+    file_keys = {
+        "file",
+        "filename",
+        "fileName",
+        "file_name",
+        "filePath",
+        "file_path",
+        "name",
+        "path",
+        "title",
+    }
+    container_keys = {"files", "fileList", "file_list", "items", "children", "paths"}
+
+    def add(value: Any) -> None:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            return
+        seen.add(text)
+        values.append(text[:240])
+
+    def walk(value: Any, *, key: str = "", depth: int = 0) -> None:
+        if len(values) >= limit or depth > 4:
+            return
+        if isinstance(value, dict):
+            for child_key, child_value in value.items():
+                if len(values) >= limit:
+                    break
+                if child_key in file_keys and not isinstance(child_value, (dict, list, tuple)):
+                    add(child_value)
+                elif child_key in container_keys or isinstance(child_value, (dict, list, tuple)):
+                    walk(child_value, key=str(child_key), depth=depth + 1)
+            return
+        if isinstance(value, (list, tuple)):
+            for child in value:
+                if len(values) >= limit:
+                    break
+                walk(child, key=key, depth=depth + 1)
+            return
+        if key in file_keys or key in container_keys:
+            add(value)
+
+    walk(item)
+    return values
 
 
 def build_haisou_share_url(item: dict[str, Any]) -> str:

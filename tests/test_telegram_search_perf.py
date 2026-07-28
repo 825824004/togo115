@@ -109,6 +109,63 @@ class TelegramSearchPerfTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(report["expired_115"], 1)
         self.assertEqual(recheck, [])
 
+    async def test_full_search_uses_global_fallback_when_dialogs_miss(self) -> None:
+        class Message:
+            id = 77
+            peer_id = "channel"
+            raw_text = "金特务：本色回归 (2026)\n点击查看资源"
+            message = raw_text
+            buttons = [["查看资源"]]
+
+        class Client:
+            async def is_user_authorized(self):
+                return True
+
+            async def iter_messages(self, entity, **kwargs):
+                if entity is None and kwargs.get("search") == "金特务":
+                    yield Message()
+                elif False:
+                    yield None
+
+        class Harness(TelegramHistorySearchMixin):
+            async def _authorized_client_for_search(self):
+                return Client()
+
+            def _config(self):
+                return {"api_id": "1", "api_hash": "hash", "sources": "-1001"}
+
+            def _configured_sources(self, config):
+                return ["-1001"]
+
+            async def _resolve_dialogs(self, client, sources):
+                return [{"entity": "dialog", "source": "-1001", "canonical": "-1001"}]
+
+            def _history_options(self, config):
+                return TelegramHistoryOptions(20, 20, 5, 10, 2, 2)
+
+            def _search_indexed_telegram_messages(self, dialogs, queries):
+                return []
+
+            async def _search_dialogs_concurrently(self, *args, **kwargs):
+                return [], {"extract_ms": 0, "cancelled": 0}
+
+            async def _pipeline_extract_message_links(self, *args, **kwargs):
+                return [
+                    SearchResult(
+                        title="金特务：本色回归",
+                        url="https://115.com/s/jintewu?password=8888",
+                        source="TelegramGlobal:channel",
+                        context="金特务：本色回归 S01E01-E08",
+                    )
+                ]
+
+            def _dedupe_results(self, results):
+                return results
+
+        results = await Harness().search_history("金特务：本色回归 2026", [])
+
+        self.assertEqual(results[0].url, "https://115.com/s/jintewu?password=8888")
+
 
 
 

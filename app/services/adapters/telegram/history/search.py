@@ -22,6 +22,9 @@ from app.services.adapters.telegram.pipeline import TelegramPipelineStats
 from app.services.link import (
     TELEGRAM_HISTORY_MAX_RESULTS,
     expanded_search_queries as _expanded_search_queries,
+    local_text_matches_query,
+    message_has_link_button_hint,
+    telegram_message_text,
 )
 from app.services.types import SearchResult
 from app.services.adapters.telegram.rate_limit import telegram_request_gate
@@ -140,6 +143,10 @@ class TelegramHistorySearchMixin(TelegramDialogSearchMixin, TelegramFastSearchMi
             incremental=incremental,
             shared_state=state,
         )
+        if not remote_results and not incremental:
+            remote_results = await self._search_global_fallback(client, queries, options, budget, state)
+            if remote_results:
+                search_metrics["global_hits"] = len(remote_results)
         all_results = [*indexed_results, *remote_results]
         metrics.search_ms = _elapsed_ms(search_started)
         metrics.extract_ms = int(search_metrics.get("extract_ms", 0) or 0)
@@ -193,4 +200,98 @@ class TelegramHistorySearchMixin(TelegramDialogSearchMixin, TelegramFastSearchMi
     def _search_indexed_telegram_messages(self, dialogs: list[dict[str, Any]], queries: list[str]) -> list[SearchResult]:
         sources = [str(item["canonical"]) for item in dialogs if item.get("canonical") is not None]
         return search_telegram_message_index(sources, queries, TELEGRAM_HISTORY_MAX_RESULTS)
+
+    async def _search_global_fallback(
+        self,
+        client: TelegramClient,
+        queries: list[str],
+        options: TelegramHistoryOptions,
+        budget: TelegramSearchBudget,
+        state: TelegramSearchSharedState,
+    ) -> list[SearchResult]:
+        """Fallback to Telegram account-wide search when configured dialogs miss."""
+        selected = self._server_search_queries(queries)
+        if not selected:
+            return []
+        results: list[SearchResult] = []
+        stats = TelegramPipelineStats()
+        seen_messages: set[int] = set()
+        started = time.perf_counter()
+        timeout = max(2.0, min(5.0, budget.remaining if budget.remaining > 0.5 else 5.0))
+        try:
+            async with asyncio.timeout(timeout):
+                for query in selected:
+                    links = await self._search_global_query(client, query, seen_messages, stats)
+                    results.extend(links)
+                    if results:
+                        break
+        except asyncio.TimeoutError:
+            add_log(
+                "warning",
+                "telegram",
+                "Telegram 全局兜底搜索超时",
+                {"queries": selected, "timeout": timeout, "hits": len(results)},
+            )
+        except Exception as exc:
+            telegram_request_gate.note_error(exc)
+            add_log(
+                "warning",
+                "telegram",
+                "Telegram 全局兜底搜索失败",
+                {"queries": selected, "error": str(exc), "error_type": type(exc).__name__},
+            )
+        add_log(
+            "info" if results else "debug",
+            "telegram",
+            "Telegram 全局兜底搜索完成",
+            {
+                "queries": selected,
+                "hits": len(results),
+                "elapsed_ms": _elapsed_ms(started),
+                **stats.as_payload(),
+            },
+        )
+        if results:
+            state.note_dialog_hits("TelegramGlobal", len(results))
+        return results
+
+    async def _search_global_query(
+        self,
+        client: TelegramClient,
+        query: str,
+        seen_messages: set[int],
+        stats: TelegramPipelineStats,
+    ) -> list[SearchResult]:
+        results: list[SearchResult] = []
+        async for message in client.iter_messages(None, search=query, limit=8, wait_time=0):
+            links = await self._extract_global_search_links(client, message, query, seen_messages, stats)
+            results.extend(links)
+            if len(results) >= TELEGRAM_HISTORY_MAX_RESULTS:
+                break
+        return results
+
+    async def _extract_global_search_links(
+        self,
+        client: TelegramClient,
+        message: Any,
+        query: str,
+        seen_messages: set[int],
+        stats: TelegramPipelineStats,
+    ) -> list[SearchResult]:
+        text = telegram_message_text(message)
+        if not (local_text_matches_query(text, query) or message_has_link_button_hint(message)):
+            return []
+        peer_id = getattr(message, "peer_id", None)
+        source = f"TelegramGlobal:{peer_id or 'unknown'}"
+        return await self._pipeline_extract_message_links(
+            client,
+            peer_id,
+            source,
+            message,
+            [query],
+            None,
+            seen_messages,
+            stats,
+            stage="global_search",
+        )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from app.services.subscription.match.text_utils import compact_match_text
+from app.services.link.search_utils import _title_delimiter_aliases
 from app.services.text_cjk import title_prefix_aliases
 
 
@@ -58,7 +59,7 @@ def _title_term_in_text(term: tuple[str, str], text: str) -> bool:
     candidates = [compact_title]
     # Also accept franchise packs that omit 新/续 prefixes present on the subscription title.
     raw_title = term[0]
-    for alias in title_prefix_aliases(raw_title)[1:]:
+    for alias in _title_alias_candidates(raw_title):
         compact_alias = compact_match_text(alias)
         if compact_alias and compact_alias not in candidates:
             candidates.append(compact_alias)
@@ -82,7 +83,7 @@ def _title_fragment_in_text(term: tuple[str, str] | None, text: str) -> bool:
         return False
     compact_text = compact_match_text(text)
     candidates = [term[1]] if term[1] else []
-    for alias in title_prefix_aliases(term[0])[1:]:
+    for alias in _title_alias_candidates(term[0]):
         compact_alias = compact_match_text(alias)
         if compact_alias and compact_alias not in candidates:
             candidates.append(compact_alias)
@@ -96,3 +97,12 @@ def _title_fragment_in_text(term: tuple[str, str] | None, text: str) -> bool:
         if candidate in compact_text:
             return True
     return False
+
+
+def _title_alias_candidates(title: str | None) -> list[str]:
+    aliases: list[str] = []
+    for alias in title_prefix_aliases(title):
+        for value in [alias, *_title_delimiter_aliases(alias)]:
+            if value and value not in aliases:
+                aliases.append(value)
+    return aliases[1:]
