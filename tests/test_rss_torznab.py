@@ -1195,6 +1195,7 @@ class RssTorznabTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(url, "https://www.qmp4.com/index.php/ajax/suggest?mid=1&wd=%E7%88%B1%E4%B8%BD%E4%B8%9D+2020")
         self.assertEqual(adapter._site_plugin_id({"type": "site_plugin", "url": "https://www.qmp4.com/"}), "qmp4")
         self.assertEqual(adapter._source_queries(source, ["爱丽丝 2020 1080p"]), ["爱丽丝 2020 1080p", "爱丽丝 1080p", "爱丽丝"])
+        self.assertEqual(adapter._source_queries(source, ["新警察故事"]), ["新警察故事", "新警察", "警察故事"])
 
     def test_magnet_web_challenge_detection(self) -> None:
         adapter = RssTorznabAdapter()
@@ -1324,6 +1325,34 @@ class RssTorznabTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["diagnostic"]["qmp4_json_ok"])
         self.assertEqual(result["diagnostic"]["qmp4_list_len"], 0)
         self.assertIn("未返回 JSON", result["diagnostic"]["message"])
+
+    async def test_qmp4_source_test_tries_compact_chinese_fallback_after_non_json(self) -> None:
+        adapter = RssTorznabAdapter()
+        source = {"name": "QMP4 / 七味", "type": "site_plugin", "plugin": "qmp4", "url": "https://www.qmp4.com/", "enabled": True}
+        blocked = httpx.Response(
+            200,
+            request=httpx.Request("GET", "https://www.qmp4.com/index.php/ajax/suggest?mid=1&wd=%E6%96%B0%E8%AD%A6%E5%AF%9F%E6%95%85%E4%BA%8B"),
+            text="<html><title>抱歉，站点已暂停</title></html>",
+        )
+        fallback = httpx.Response(
+            200,
+            request=httpx.Request("GET", "https://www.qmp4.com/index.php/ajax/suggest?mid=1&wd=%E6%96%B0%E8%AD%A6%E5%AF%9F"),
+            json={"code": 1, "total": 1, "list": [{"id": 143766, "name": "新警察故事", "en": "xinjingchagushi"}]},
+        )
+        detail_html = """
+        <html><head><title>新警察故事在线观看-新警察故事迅雷下载 - 七味</title></head><body>
+          <a href="magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&dn=NewPoliceStory">磁力下载</a>
+        </body></html>
+        """
+
+        with patch.object(adapter, "_get_magnet_web_page", new=AsyncMock(side_effect=[blocked, fallback])):
+            with patch.object(adapter, "_fetch_magnet_web_detail", new=AsyncMock(return_value=("https://www.qmp4.com/mv/143766.html", detail_html))):
+                result = await adapter.test_source(source, "新警察故事")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"], 1)
+        self.assertIn("wd=%E6%96%B0%E8%AD%A6%E5%AF%9F", result["url"])
+        self.assertIn("新警察故事", result["sample"][0]["context"])
 
     async def test_magnet_web_detail_urls_prefer_matching_year(self) -> None:
         adapter = RssTorznabAdapter()

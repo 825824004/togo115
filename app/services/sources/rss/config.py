@@ -180,6 +180,11 @@ class RssTorznabConfigMixin:
         for item in (value, no_year, no_quality):
             if item and item not in variants:
                 variants.append(item)
+        compact = re.sub(r"\s+", "", no_quality or no_year or value)
+        if len(compact) >= 4 and re.fullmatch(r"[\u4e00-\u9fff]+", compact):
+            for item in (compact[:-2], compact[1:]):
+                if len(item) >= 3 and item not in variants:
+                    variants.append(item)
         return variants
 
     def _source_queries(self, source: dict[str, Any], queries: list[str]) -> list[str | None]:
@@ -281,5 +286,4 @@ class RssTorznabConfigMixin:
             proxy = get_setting("proxy")
             return proxy.get("url")
         return None
-
 
