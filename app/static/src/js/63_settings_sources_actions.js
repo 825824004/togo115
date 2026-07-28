@@ -86,6 +86,9 @@ async function testRssSource(event) {
             ${data.query ? `<span>查询：${escapeHtml(data.query)}</span>` : ""}
             ${data.final_url ? `<span>URL：${escapeHtml(data.final_url)}</span>` : ""}
             ${diagnostic.detail_candidates !== undefined ? `<span>详情候选：${escapeHtml(String(diagnostic.detail_candidates))}</span>` : ""}
+            ${diagnostic.qmp4_list_len !== undefined ? `<span>接口候选：${escapeHtml(String(diagnostic.qmp4_list_len))}</span>` : ""}
+            ${diagnostic.qmp4_total !== undefined && diagnostic.qmp4_total !== null ? `<span>接口总数：${escapeHtml(String(diagnostic.qmp4_total))}</span>` : ""}
+            ${diagnostic.qmp4_code !== undefined && diagnostic.qmp4_code !== null ? `<span>接口状态：${escapeHtml(String(diagnostic.qmp4_code))}</span>` : ""}
             ${diagnostic.message ? `<span>${escapeHtml(diagnostic.message)}</span>` : ""}
           </div>`
         : "";

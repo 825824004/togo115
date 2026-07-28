@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -10,6 +11,26 @@ from app.services.types import SearchResult
 
 
 class RssTorznabQmp4Mixin:
+    def _qmp4_suggest_stats(self, json_text: str) -> dict[str, Any]:
+        try:
+            payload = json.loads(json_text or "")
+        except (TypeError, json.JSONDecodeError):
+            payload = None
+        if not isinstance(payload, dict):
+            return {
+                "json_ok": False,
+                "code": None,
+                "total": None,
+                "list_len": 0,
+            }
+        items = payload.get("list")
+        return {
+            "json_ok": True,
+            "code": payload.get("code"),
+            "total": payload.get("total"),
+            "list_len": len(items) if isinstance(items, list) else 0,
+        }
+
     def _qmp4_detail_candidates(self, source_url: str, json_text: str, limit: int = MAGNET_WEB_DETAIL_LIMIT) -> list[tuple[str, str]]:
         payload = json_loads(json_text, {})
         items = payload.get("list") if isinstance(payload, dict) else None

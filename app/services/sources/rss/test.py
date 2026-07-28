@@ -164,14 +164,27 @@ class RssTorznabTestMixin:
             "plugin": plugin_id,
         }
         if plugin_id == "qmp4":
+            stats = self._qmp4_suggest_stats(res.text)
             candidates = self._qmp4_detail_candidates(url, res.text)
+            diagnostic.update(
+                {
+                    "qmp4_json_ok": stats["json_ok"],
+                    "qmp4_code": stats["code"],
+                    "qmp4_total": stats["total"],
+                    "qmp4_list_len": stats["list_len"],
+                }
+            )
             diagnostic["detail_candidates"] = len(candidates)
             if candidates:
                 diagnostic["message"] = (
                     f"已找到 {len(candidates)} 个详情候选，但详情页未解析到磁力链接。"
                 )
-            elif "list" not in str(res.text or ""):
-                diagnostic["message"] = "QMP4 搜索接口未返回可用结果列表。"
+            elif not stats["json_ok"]:
+                diagnostic["message"] = "QMP4 搜索接口未返回 JSON，可能被站点拦截或代理改写。"
+            elif stats["list_len"] <= 0:
+                diagnostic["message"] = (
+                    f"QMP4 搜索接口返回 0 个候选，code={stats['code']}，total={stats['total']}。"
+                )
         else:
             diagnostic["detail_candidates"] = len(
                 self._magnet_web_detail_candidates(url, res.text, self._query_release_year(query))

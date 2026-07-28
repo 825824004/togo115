@@ -1291,6 +1291,40 @@ class RssTorznabTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("火遮眼", results[0].context)
         self.assertEqual(results[0].source, "site_plugin:QMP4 / 七味")
 
+    async def test_qmp4_source_test_reports_suggest_stats_for_zero_results(self) -> None:
+        adapter = RssTorznabAdapter()
+        source = {"name": "QMP4 / 七味", "type": "site_plugin", "plugin": "qmp4", "url": "https://www.qmp4.com/", "enabled": True}
+        request = httpx.Request("GET", "https://www.qmp4.com/index.php/ajax/suggest?mid=1&wd=%E4%B8%8D%E5%AD%98%E5%9C%A8")
+        response = httpx.Response(200, request=request, json={"code": 1, "total": 0, "list": []})
+
+        with patch.object(adapter, "_get_magnet_web_page", new=AsyncMock(return_value=response)):
+            result = await adapter.test_source(source, "不存在")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"], 0)
+        self.assertEqual(result["diagnostic"]["detail_candidates"], 0)
+        self.assertTrue(result["diagnostic"]["qmp4_json_ok"])
+        self.assertEqual(result["diagnostic"]["qmp4_code"], 1)
+        self.assertEqual(result["diagnostic"]["qmp4_total"], 0)
+        self.assertEqual(result["diagnostic"]["qmp4_list_len"], 0)
+        self.assertIn("QMP4 搜索接口返回 0 个候选", result["diagnostic"]["message"])
+
+    async def test_qmp4_source_test_reports_non_json_response(self) -> None:
+        adapter = RssTorznabAdapter()
+        source = {"name": "QMP4 / 七味", "type": "site_plugin", "plugin": "qmp4", "url": "https://www.qmp4.com/", "enabled": True}
+        request = httpx.Request("GET", "https://www.qmp4.com/index.php/ajax/suggest?mid=1&wd=%E7%81%AB%E9%81%AE%E7%9C%BC")
+        response = httpx.Response(200, request=request, text="<html><title>七味</title><body>blocked</body></html>")
+
+        with patch.object(adapter, "_get_magnet_web_page", new=AsyncMock(return_value=response)):
+            result = await adapter.test_source(source, "火遮眼")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["items"], 0)
+        self.assertEqual(result["diagnostic"]["detail_candidates"], 0)
+        self.assertFalse(result["diagnostic"]["qmp4_json_ok"])
+        self.assertEqual(result["diagnostic"]["qmp4_list_len"], 0)
+        self.assertIn("未返回 JSON", result["diagnostic"]["message"])
+
     async def test_magnet_web_detail_urls_prefer_matching_year(self) -> None:
         adapter = RssTorznabAdapter()
         search_html = """
