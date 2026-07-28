@@ -9,6 +9,7 @@ from app.db import json_loads
 from app.services.adapters.telegram.session.client import (
     TELEGRAM_CLIENT_CONNECT_RETRIES,
     TELEGRAM_CLIENT_CONNECT_RETRY_DELAY_SECONDS,
+    TELEGRAM_CLIENT_INIT_FAILURE_COOLDOWN_SECONDS,
     TELEGRAM_SESSION_BUSY_TIMEOUT_MS,
     TELEGRAM_SESSION_CONNECT_TIMEOUT_SECONDS,
     BusyTimeoutSQLiteSession,
@@ -65,18 +66,23 @@ class TelegramSessionConfigMixin(TelegramSessionClientMixin):
         session_file = self._session_file_path()
         try:
             config = get_setting("telegram")
+            proxy = get_setting("proxy")
         except Exception:
             return {
                 "api_id": False,
                 "api_hash": False,
                 "session_file": False,
                 "session_path": str(session_file),
+                "proxy_enabled": False,
             }
+        proxy_modules = proxy.get("modules") if isinstance(proxy, dict) else []
+        proxy_enabled = bool(isinstance(proxy, dict) and proxy.get("url") and "telegram" in (proxy_modules or []))
         return {
             "api_id": bool(config.get("api_id")),
             "api_hash": bool(config.get("api_hash")),
             "session_file": session_file.exists(),
             "session_path": str(session_file),
+            "proxy_enabled": proxy_enabled,
         }
 
 
@@ -84,6 +90,7 @@ __all__ = [
     "BusyTimeoutSQLiteSession",
     "TELEGRAM_CLIENT_CONNECT_RETRIES",
     "TELEGRAM_CLIENT_CONNECT_RETRY_DELAY_SECONDS",
+    "TELEGRAM_CLIENT_INIT_FAILURE_COOLDOWN_SECONDS",
     "TELEGRAM_SESSION_BUSY_TIMEOUT_MS",
     "TELEGRAM_SESSION_CONNECT_TIMEOUT_SECONDS",
     "TelegramSessionConfigMixin",

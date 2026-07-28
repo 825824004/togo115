@@ -130,7 +130,9 @@ class TelegramDialogSearchMixin(TelegramDialogSearchQueryMixin, TelegramDialogSe
             client = await asyncio.wait_for(self.client(), timeout=15)
         except Exception as exc:
             telegram_request_gate.note_error(exc)
-            add_log("warning", "telegram", "Telegram 客户端初始化失败", {"error": str(exc), "error_type": type(exc).__name__})
+            category = self._classify_client_error(exc)
+            self._remember_current_client_init_failure(exc)
+            self._log_client_init_failure(exc, category, action="search-client-init", recovered=False)
             return None
         try:
             authorized = await asyncio.wait_for(client.is_user_authorized(), timeout=8)

@@ -126,6 +126,35 @@ async def probe_share_availability(
 
     result = classify_share_payload(payload if isinstance(payload, dict) else {})
     if result.status == SHARE_UNAVAILABLE:
+        fallback = await _fallback_with_haisou(clean_link, receive_code, trigger=f"hard_unavailable:{result.reason}")
+        if fallback is not None and fallback.status == SHARE_AVAILABLE:
+            add_log(
+                "warning",
+                "115",
+                "115 原生检测判定失效，但海搜复核可用，已按可用继续处理",
+                {
+                    "link": clean_link,
+                    "origin_reason": result.reason,
+                    "origin_message": result.message,
+                    "haisou_reason": fallback.reason,
+                    "haisou_message": fallback.message,
+                },
+            )
+            return _cache_set(cache_key, fallback)
+        if fallback is not None and fallback.status == SHARE_UNKNOWN:
+            add_log(
+                "warning",
+                "115",
+                "115 原生检测判定失效，但海搜复核未知，已改为待复检避免误杀",
+                {
+                    "link": clean_link,
+                    "origin_reason": result.reason,
+                    "origin_message": result.message,
+                    "haisou_reason": fallback.reason,
+                    "haisou_message": fallback.message,
+                },
+            )
+            return _cache_set(cache_key, fallback)
         add_log(
             "info",
             "115",

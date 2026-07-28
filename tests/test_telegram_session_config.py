@@ -8,10 +8,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.services.adapters.telegram.session.config import (
+    TELEGRAM_CLIENT_INIT_FAILURE_COOLDOWN_SECONDS,
     TELEGRAM_SESSION_BUSY_TIMEOUT_MS,
     BusyTimeoutSQLiteSession,
     TelegramSessionConfigMixin,
 )
+from app.services.adapters.telegram.session.client_errors import client_error_message
 from app.services.adapters.telegram.session.login import TelegramLoginMixin, TELEGRAM_SESSION_DUPLICATED_MESSAGE
 
 
@@ -60,6 +62,9 @@ class TelegramSessionConfigTest(unittest.TestCase):
         for exc, category in cases:
             with self.subTest(category=category):
                 self.assertEqual(mixin._classify_client_error(exc), category)
+
+    def test_empty_timeout_error_has_friendly_message(self) -> None:
+        self.assertIn("连接 Telegram 超时", client_error_message("timeout", asyncio.TimeoutError()))
 
     def test_config_status_contains_session_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -117,4 +122,30 @@ class TelegramLoginSessionRecoveryTest(unittest.IsolatedAsyncioTestCase):
 
             self.assertFalse(session_file.exists())
             self.assertIn(TELEGRAM_SESSION_DUPLICATED_MESSAGE, str(save_flow.call_args.args[1]["error"]))
+
+    async def test_client_init_timeout_enters_short_cooldown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            class LocalMixin(TelegramSessionConfigMixin):
+                _client = None
+                _client_loop = None
+                _client_init_failure = None
+
+                def _config(self) -> dict:
+                    return {"api_id": "1", "api_hash": "hash"}
+
+                def _session_path(self) -> Path:
+                    return Path(tmp) / "telegram_user"
+
+                async def _connect_client_with_retry(self, config, proxy):
+                    raise asyncio.TimeoutError()
+
+            with patch("app.services.adapters.telegram.session.client.module_proxy", return_value=None):
+                with self.assertRaises(asyncio.TimeoutError):
+                    await LocalMixin().client()
+                with self.assertRaisesRegex(RuntimeError, "暂缓重复初始化"):
+                    await LocalMixin().client()
+
+            failure = LocalMixin._client_init_failure
+            self.assertIsNotNone(failure)
+            self.assertLessEqual(float(failure["until"]), __import__("time").monotonic() + TELEGRAM_CLIENT_INIT_FAILURE_COOLDOWN_SECONDS)
 

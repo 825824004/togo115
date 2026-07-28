@@ -21,6 +21,8 @@ TELEGRAM_SESSION_BUSY_TIMEOUT_MS = 15000
 TELEGRAM_SESSION_CONNECT_TIMEOUT_SECONDS = 15
 TELEGRAM_CLIENT_CONNECT_RETRIES = 3
 TELEGRAM_CLIENT_CONNECT_RETRY_DELAY_SECONDS = 0.35
+TELEGRAM_CLIENT_CONNECT_ATTEMPT_TIMEOUT_SECONDS = 18
+TELEGRAM_CLIENT_INIT_FAILURE_COOLDOWN_SECONDS = 45
 
 
 class BusyTimeoutSQLiteSession(SQLiteSession):
@@ -50,12 +52,16 @@ class TelegramSessionClientMixin:
             if cls._client and cls._client.is_connected():
                 await cls._client.disconnect()
             config = self._config()
-            proxy = self._telethon_proxy(module_proxy("telegram"))
+            proxy_url = module_proxy("telegram")
+            proxy = self._telethon_proxy(proxy_url)
+            self._raise_if_client_init_in_cooldown(config, proxy_url)
             try:
                 cls._client = await self._connect_client_with_retry(config, proxy)
-            except Exception:
+            except Exception as exc:
+                self._remember_client_init_failure(config, proxy_url, exc)
                 await self._reset_client_state()
                 raise
+            self._clear_client_init_failure()
             cls._client_loop = loop
             return cls._client
 
@@ -74,7 +80,7 @@ class TelegramSessionClientMixin:
         for attempt in range(TELEGRAM_CLIENT_CONNECT_RETRIES):
             client = self._build_telegram_client(config, proxy)
             try:
-                await asyncio.wait_for(client.connect(), timeout=12)
+                await asyncio.wait_for(client.connect(), timeout=TELEGRAM_CLIENT_CONNECT_ATTEMPT_TIMEOUT_SECONDS)
                 if attempt > 0:
                     add_log(
                         "info",
@@ -104,6 +110,10 @@ class TelegramSessionClientMixin:
             int(config["api_id"]),
             config["api_hash"],
             proxy=proxy,
+            connection_retries=1,
+            retry_delay=0.5,
+            timeout=10,
+            request_retries=1,
         )
 
     async def _safe_disconnect_client(self, client: TelegramClient) -> None:
@@ -193,6 +203,55 @@ class TelegramSessionClientMixin:
 
     def _classify_client_error(self, exc: Exception) -> str:
         return classify_client_error(exc)
+
+    def _raise_if_client_init_in_cooldown(self, config: dict[str, Any], proxy_url: str | None) -> None:
+        cls = type(self)
+        failure = getattr(cls, "_client_init_failure", None)
+        if not failure:
+            return
+        if failure.get("fingerprint") != self._client_init_fingerprint(config, proxy_url):
+            self._clear_client_init_failure()
+            return
+        remaining = float(failure.get("until", 0)) - time.monotonic()
+        if remaining <= 0:
+            self._clear_client_init_failure()
+            return
+        category = str(failure.get("category") or "timeout")
+        raise RuntimeError(
+            f"Telegram 客户端连接失败，已暂缓重复初始化 {int(remaining) + 1}s；"
+            "请检查 Telegram 代理配置或稍后重试。"
+            f" 最近错误：{category}"
+        )
+
+    def _remember_client_init_failure(self, config: dict[str, Any], proxy_url: str | None, exc: Exception) -> None:
+        cls = type(self)
+        category = self._classify_client_error(exc)
+        if category not in {"timeout", "network-or-proxy"}:
+            return
+        cls._client_init_failure = {
+            "fingerprint": self._client_init_fingerprint(config, proxy_url),
+            "until": time.monotonic() + TELEGRAM_CLIENT_INIT_FAILURE_COOLDOWN_SECONDS,
+            "category": category,
+        }
+
+    def _remember_current_client_init_failure(self, exc: Exception) -> None:
+        try:
+            config = self._config()
+            proxy_url = module_proxy("telegram")
+        except Exception:
+            return
+        self._remember_client_init_failure(config, proxy_url, exc)
+
+    def _clear_client_init_failure(self) -> None:
+        type(self)._client_init_failure = None
+
+    def _client_init_fingerprint(self, config: dict[str, Any], proxy_url: str | None) -> tuple[Any, ...]:
+        return (
+            str(config.get("api_id") or ""),
+            bool(config.get("api_hash")),
+            str(proxy_url or ""),
+            self._session_file_path().exists(),
+        )
 
     def _log_client_init_failure(
         self,
