@@ -132,7 +132,7 @@ async function startTgQr() {
     box.innerHTML = `<img alt="Telegram QR" src="${data.qr_url}" onerror="this.replaceWith(Object.assign(document.createElement('span'), {textContent:'二维码图片加载失败'}))" /><span>用 Telegram 扫码登录</span>`;
     state.tgLoginTimer = setInterval(checkTgStatus, 3000);
   } catch (error) {
-    box.innerHTML = `<span>二维码生成失败：${escapeHtml(error.message)}</span>`;
+    box.innerHTML = `<span>二维码生成失败：${escapeHtml(formatTelegramLoginError(error.message))}</span>`;
   }
 }
 
@@ -149,11 +149,12 @@ async function checkTgStatus() {
     state.tgLoginTimer = null;
     if (box) box.innerHTML = `<span>Telegram 已登录</span>`;
   } else if (box && data.status && data.status !== "waiting") {
+    const statusText = data.error ? formatTelegramLoginError(data.error) : data.status;
     const label = box.querySelector(".qr-status-label");
-    if (label) label.textContent = `Telegram 状态：${data.status}`;
-    else box.insertAdjacentHTML("beforeend", `<span class="qr-status-label">Telegram 状态：${escapeHtml(data.status)}</span>`);
+    if (label) label.textContent = `Telegram 状态：${statusText}`;
+    else box.insertAdjacentHTML("beforeend", `<span class="qr-status-label">Telegram 状态：${escapeHtml(statusText)}</span>`);
   }
-  if (!state.tgLoginTimer) toast(data.authorized ? "Telegram 已登录" : `Telegram 未登录：${data.status || "waiting"}`);
+  if (!state.tgLoginTimer) toast(data.authorized ? "Telegram 已登录" : `Telegram 未登录：${formatTelegramLoginError(data.error || data.status || "waiting")}`);
 }
 
 async function sendTgCode() {
@@ -163,7 +164,7 @@ async function sendTgCode() {
     await api("/api/telegram/send-code", { method: "POST", body: JSON.stringify({ phone }) });
     toast("验证码已发送");
   } catch (error) {
-    toast(`验证码发送失败：${error.message}`);
+    toast(`验证码发送失败：${formatTelegramLoginError(error.message)}`);
   }
 }
 
@@ -179,8 +180,24 @@ async function loginTgCode() {
     }
     toast("Telegram 已登录");
   } catch (error) {
-    toast(`验证码登录失败：${error.message}`);
+    toast(`验证码登录失败：${formatTelegramLoginError(error.message)}`);
   }
+}
+
+function formatTelegramLoginError(message) {
+  const text = String(message || "");
+  const lower = text.toLowerCase();
+  if (
+    lower.includes("two different ip addresses") ||
+    lower.includes("authkeyduplicated") ||
+    lower.includes("auth_key_duplicated") ||
+    lower.includes("same session exclusively") ||
+    lower.includes("session_duplicated") ||
+    lower.includes("会话已被判定在不同 ip 同时使用")
+  ) {
+    return "Telegram 会话已失效，系统已隔离旧会话，请重新生成二维码或重新发送验证码登录。";
+  }
+  return text.length > 160 ? `${text.slice(0, 157)}...` : text;
 }
 
 async function loadTelegramDialogs() {

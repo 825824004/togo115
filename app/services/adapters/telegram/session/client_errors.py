@@ -10,6 +10,15 @@ def classify_client_error(exc: Exception) -> str:
     text = f"{type(exc).__name__}: {exc!s} {exc!r}".casefold()
     if isinstance(exc, asyncio.TimeoutError) or "timeout" in text or "timed out" in text:
         return "timeout"
+    if (
+        "authkeyduplicated" in text
+        or "auth_key_duplicated" in text
+        or "auth key duplicated" in text
+        or "two different ip addresses" in text
+        or "same session exclusively" in text
+        or "session file was used under two different ip addresses" in text
+    ):
+        return "session-duplicated"
     if "api id/api hash" in text or "尚未配置" in text or "missing-config" in text:
         return "missing-config"
     if "database is locked" in text or "database table is locked" in text or "database locked" in text:

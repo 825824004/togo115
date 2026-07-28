@@ -113,8 +113,8 @@ class TelegramSessionClientMixin:
             pass
 
     async def _handle_client_connect_failure(self, exc: Exception, category: str, attempt: int) -> bool:
-        if category == "session-corrupt":
-            await self._handle_corrupt_session(exc, attempt)
+        if category in {"session-corrupt", "session-duplicated"}:
+            await self._handle_invalid_session(exc, category, attempt)
         can_retry = attempt < TELEGRAM_CLIENT_CONNECT_RETRIES - 1 and category in {
             "session-locked",
             "timeout",
@@ -136,17 +136,20 @@ class TelegramSessionClientMixin:
         self._log_client_init_failure(exc, category, action="fail", recovered=False, attempt=attempt + 1)
         return False
 
-    async def _handle_corrupt_session(self, exc: Exception, attempt: int) -> None:
+    async def _handle_invalid_session(self, exc: Exception, category: str, attempt: int) -> None:
         quarantined = self._quarantine_session_file()
         await self._reset_client_state()
         self._log_client_init_failure(
             exc,
-            "session-corrupt",
+            category,
             action="quarantine-and-reset",
             recovered=bool(quarantined),
             attempt=attempt + 1,
             extra={"quarantined_path": quarantined} if quarantined else None,
         )
+
+    async def _handle_corrupt_session(self, exc: Exception, attempt: int) -> None:
+        await self._handle_invalid_session(exc, "session-corrupt", attempt)
 
     async def _reset_client_state(self) -> None:
         cls = type(self)

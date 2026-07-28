@@ -10,10 +10,18 @@ from app.db import add_log, utc_now
 from app.services.integration_state import get_flow, save_flow
 
 
+TELEGRAM_SESSION_DUPLICATED_MESSAGE = (
+    "Telegram 会话已被判定在不同 IP 同时使用，旧会话已自动隔离，请重新生成二维码或重新发送验证码登录。"
+)
+
+
 class TelegramLoginMixin:
     async def qr_login_start(self) -> dict[str, Any]:
-        client = await self.client()
-        qr = await client.qr_login()
+        try:
+            client = await self.client()
+            qr = await client.qr_login()
+        except Exception as exc:
+            await self._handle_login_session_error(exc, action="qr-login-start")
         qr_url = f"/api/qr?data={quote(str(qr.url), safe='')}"
         save_flow("telegram_login", self._qr_flow_payload(qr.url, qr_url, "waiting"))
         asyncio.create_task(self._wait_qr_login(qr, qr_url))
@@ -28,6 +36,8 @@ class TelegramLoginMixin:
             save_flow("telegram_login", self._qr_flow_payload(qr.url, qr_url, "password_required"))
             add_log("warning", "telegram", "Telegram 需要两步验证密码")
         except Exception as exc:
+            if await self._handle_login_session_error(exc, action="qr-login-wait", raise_error=False):
+                return
             payload = self._qr_flow_payload(qr.url, qr_url, "failed")
             save_flow("telegram_login", {**payload, "error": str(exc)})
             add_log("warning", "telegram", "Telegram 扫码登录等待结束", {"error": str(exc)})
@@ -36,8 +46,11 @@ class TelegramLoginMixin:
         return {"method": "qr", "url": url, "qr_url": qr_url, "status": status, "started_at": utc_now()}
 
     async def send_login_code(self, phone: str) -> dict[str, Any]:
-        client = await self.client()
-        sent = await client.send_code_request(phone)
+        try:
+            client = await self.client()
+            sent = await client.send_code_request(phone)
+        except Exception as exc:
+            await self._handle_login_session_error(exc, action="send-code")
         save_flow(
             "telegram_login",
             {
@@ -52,7 +65,10 @@ class TelegramLoginMixin:
         return {"status": "code_sent"}
 
     async def sign_in_code(self, phone: str, code: str) -> dict[str, Any]:
-        client = await self.client()
+        try:
+            client = await self.client()
+        except Exception as exc:
+            await self._handle_login_session_error(exc, action="code-login-client")
         flow = get_flow("telegram_login")
         phone_code_hash = flow.get("phone_code_hash")
         if not phone_code_hash or flow.get("phone") != phone:
@@ -63,6 +79,8 @@ class TelegramLoginMixin:
             save_flow("telegram_login", {**flow, "status": "password_required"})
             add_log("warning", "telegram", "Telegram 手机验证码通过，需要两步验证密码")
             return {"status": "password_required"}
+        except Exception as exc:
+            await self._handle_login_session_error(exc, action="code-login")
         save_flow("telegram_login", {**flow, "status": "authorized"})
         add_log("info", "telegram", "Telegram 手机验证码登录成功")
         return {"status": "authorized"}
@@ -75,3 +93,37 @@ class TelegramLoginMixin:
             status = "not_authorized"
             save_flow("telegram_login", {**flow, "status": status})
         return {**flow, "authorized": authorized, "status": status}
+
+    async def _handle_login_session_error(self, exc: Exception, *, action: str, raise_error: bool = True) -> bool:
+        category = self._classify_client_error(exc)
+        if category != "session-duplicated":
+            if raise_error:
+                raise exc
+            return False
+        quarantined = self._quarantine_session_file()
+        await self._reset_client_state()
+        save_flow(
+            "telegram_login",
+            {
+                "method": "reset",
+                "status": "session_duplicated",
+                "error": TELEGRAM_SESSION_DUPLICATED_MESSAGE,
+                "started_at": utc_now(),
+                "quarantined_path": quarantined,
+            },
+        )
+        add_log(
+            "warning",
+            "telegram",
+            "Telegram 会话在不同 IP 同时使用，已隔离旧会话",
+            {
+                "category": category,
+                "action": action,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+                "quarantined_path": quarantined,
+            },
+        )
+        if raise_error:
+            raise RuntimeError(TELEGRAM_SESSION_DUPLICATED_MESSAGE) from exc
+        return True

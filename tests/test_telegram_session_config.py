@@ -12,6 +12,7 @@ from app.services.adapters.telegram.session.config import (
     BusyTimeoutSQLiteSession,
     TelegramSessionConfigMixin,
 )
+from app.services.adapters.telegram.session.login import TelegramLoginMixin, TELEGRAM_SESSION_DUPLICATED_MESSAGE
 
 
 class TelegramSessionConfigTest(unittest.TestCase):
@@ -48,6 +49,12 @@ class TelegramSessionConfigTest(unittest.TestCase):
             (OSError("Connection refused by proxy"), "network-or-proxy"),
             (RuntimeError("Telegram API ID/API HASH 尚未配置"), "missing-config"),
             (RuntimeError("Auth key unregistered"), "auth"),
+            (
+                RuntimeError(
+                    "The authorization key (session file) was used under two different IP addresses simultaneously"
+                ),
+                "session-duplicated",
+            ),
         ]
 
         for exc, category in cases:
@@ -87,4 +94,27 @@ class TelegramSessionConfigTest(unittest.TestCase):
             self.assertFalse(session_file.exists())
             self.assertTrue(Path(quarantined).exists())
             self.assertTrue(Path(str(quarantined) + "-wal").exists())
+
+
+class TelegramLoginSessionRecoveryTest(unittest.IsolatedAsyncioTestCase):
+    async def test_qr_login_quarantines_duplicated_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            class LocalMixin(TelegramLoginMixin, TelegramSessionConfigMixin):
+                async def client(self):
+                    raise RuntimeError(
+                        "The authorization key (session file) was used under two different IP addresses simultaneously"
+                    )
+
+                def _session_path(self) -> Path:
+                    return Path(tmp) / "telegram_user"
+
+            session_file = Path(tmp) / "telegram_user.session"
+            session_file.write_text("session", encoding="utf-8")
+
+            with patch("app.services.adapters.telegram.session.login.save_flow") as save_flow:
+                with self.assertRaisesRegex(RuntimeError, "Telegram 会话已被判定"):
+                    await LocalMixin().qr_login_start()
+
+            self.assertFalse(session_file.exists())
+            self.assertIn(TELEGRAM_SESSION_DUPLICATED_MESSAGE, str(save_flow.call_args.args[1]["error"]))
 
