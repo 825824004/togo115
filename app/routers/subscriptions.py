@@ -23,6 +23,7 @@ from app.services.application import (
 from app.services.jobs import list_jobs
 from app.services.manual_search import manual_search_resources
 from app.services.resource_queries import clear_resources, delete_resources, list_recent_resources
+from app.services.subscription.episode_state import completion_state, episode_states_for
 
 
 router = APIRouter()
@@ -82,6 +83,22 @@ async def resources(
     user: dict = Depends(current_user),
 ) -> list[dict]:
     return await asyncio.to_thread(list_recent_resources, limit, offset)
+
+
+@router.get("/api/subscriptions/{subscription_id}/episode-states")
+async def subscription_episode_states(subscription_id: int, user: dict = Depends(current_user)) -> dict:
+    """Per-episode missing-list state machine snapshot for the closed-loop pipeline."""
+    sub = await asyncio.to_thread(get_subscription, subscription_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="订阅不存在")
+    states = await asyncio.to_thread(episode_states_for, subscription_id)
+    completion = await asyncio.to_thread(completion_state, sub)
+    return {
+        "subscription_id": subscription_id,
+        "media_type": sub.get("media_type"),
+        "states": states,
+        "completion": completion,
+    }
 
 
 @router.post("/api/resources/bulk-delete")

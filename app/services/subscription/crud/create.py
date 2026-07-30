@@ -20,6 +20,12 @@ async def create_subscription(payload: SubscriptionCreate) -> dict:
 
     subscription_id = _insert_subscription_payload(payload)
     await _sync_created_subscription_with_emby(subscription_id)
+    try:
+        from app.services.subscription.episode_state import recompute_missing
+
+        recompute_missing(subscription_id)
+    except Exception as exc:
+        add_log("warning", "episode_state", "创建订阅后初始化缺失清单状态失败", {"id": subscription_id, "error": str(exc)})
     add_log("info", "subscription", "创建订阅，历史消息搜索已进入后台", {"title": payload.title})
     _schedule_subscription_search(subscription_id)
     from app.services.subscription.crud.rows import invalidate_subscription_list_cache as _inv_sub_list

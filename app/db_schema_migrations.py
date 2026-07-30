@@ -27,6 +27,7 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     _ensure_indexes(conn)
     _ensure_emby_webhook_events(conn)
     _ensure_subscription_auto_source_columns(conn)
+    _ensure_episode_states(conn)
 
 
 _SUBSCRIPTION_COLUMNS = {
@@ -264,6 +265,26 @@ def _ensure_subscription_auto_source_columns(conn: sqlite3.Connection) -> None:
             "auto_source_detail": "TEXT",
         },
     )
+
+def _ensure_episode_states(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subscription_episode_states (
+            subscription_id INTEGER NOT NULL,
+            season INTEGER NOT NULL,
+            episode INTEGER NOT NULL,
+            state TEXT NOT NULL DEFAULT 'wanted',
+            resource_id INTEGER,
+            quality_rank REAL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (subscription_id, season, episode)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eps_state ON subscription_episode_states(subscription_id, state)"
+    )
+
 
 def _ensure_indexes(conn: sqlite3.Connection) -> None:
     conn.executescript(

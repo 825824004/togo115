@@ -1249,6 +1249,9 @@ async function renderSubscriptions() {
     if (!subscription) return;
     await editQualityRules(subscription);
   }));
+  document.querySelectorAll("[data-episode-states]").forEach((btn) => btn.addEventListener("click", async () => {
+    await showEpisodeStates(Number(btn.dataset.episodeStates));
+  }));
   document.querySelectorAll("[data-deliver]").forEach((btn) => btn.addEventListener("click", async () => {
     const res = await api(`/api/resources/${btn.dataset.deliver}/deliver`, { method: "POST" });
     await refreshSubscriptionData();
@@ -1279,6 +1282,76 @@ async function renderSubscriptions() {
       toast(`重试失败：${error.message}`);
     }
   });
+}
+
+async function showEpisodeStates(subscriptionId) {
+  let data;
+  try {
+    data = await api(`/api/subscriptions/${subscriptionId}/episode-states`);
+  } catch (error) {
+    toast(`获取缺失清单失败：${error.message}`);
+    return;
+  }
+  const completion = data.completion || {};
+  const states = data.states || [];
+  const wanted = states.filter((s) => s.state === "wanted").map((s) => [s.season, s.episode]);
+  const ranges = formatEpisodeRanges(wanted);
+  let summary;
+  if (completion.media_type !== "tv") {
+    summary = completion.state === "complete" ? "电影已入库" : "电影未入库";
+  } else if (completion.state === "complete") {
+    summary = "已完整入库";
+  } else if (completion.state === "partial") {
+    summary = `已入库 ${completion.in_library}/${completion.expected}，还缺 ${completion.missing} 集`;
+  } else {
+    summary = `待补全 ${completion.expected} 集`;
+  }
+  const body = wanted.length
+    ? ranges.map((r) => `<span class="episode-range">${escapeHtml(r)}</span>`).join("")
+    : `<span class="episode-range complete">全部到齐 ✔</span>`;
+  const overlay = document.createElement("div");
+  overlay.className = "episode-states-overlay";
+  overlay.innerHTML = `
+    <div class="episode-states-modal">
+      <div class="episode-states-header">
+        <h3>缺失清单 · 订阅 #${subscriptionId}</h3>
+        <button type="button" class="episode-states-close" aria-label="关闭">×</button>
+      </div>
+      <p class="episode-states-summary">${escapeHtml(summary)}</p>
+      <div class="episode-states-ranges">${body}</div>
+    </div>`;
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.classList.contains("episode-states-close")) {
+      overlay.remove();
+    }
+  });
+  document.body.appendChild(overlay);
+}
+
+function formatEpisodeRanges(keys) {
+  if (!keys.length) return [];
+  const bySeason = {};
+  for (const [season, episode] of keys) {
+    (bySeason[season] = bySeason[season] || []).push(episode);
+  }
+  const labels = [];
+  for (const season of Object.keys(bySeason).map(Number).sort((a, b) => a - b)) {
+    const eps = bySeason[season].sort((a, b) => a - b);
+    const pad = (value) => String(value).padStart(2, "0");
+    let start = eps[0];
+    let prev = eps[0];
+    const flush = (s, e) => labels.push(s === e ? `S${pad(season)}E${pad(s)}` : `S${pad(season)}E${pad(s)}-E${pad(e)}`);
+    for (let i = 1; i < eps.length; i++) {
+      if (eps[i] === prev + 1) {
+        prev = eps[i];
+        continue;
+      }
+      flush(start, prev);
+      start = prev = eps[i];
+    }
+    flush(start, prev);
+  }
+  return labels;
 }
 
 /* source: static/src/js/41_subscription_cards.js */
@@ -1350,6 +1423,7 @@ function subscriptionCards() {
           <div class="subscription-card-actions">
             <button type="button" class="keyword-chip" data-edit="${item.id}" title="${escapeHtml(keywords)}">关键词</button>
             <button type="button" class="keyword-chip" data-edit-rules="${item.id}">规则</button>
+            ${item.media_type === "tv" ? `<button type="button" class="keyword-chip" data-episode-states="${item.id}" title="查看缺失清单">缺失清单</button>` : ""}
           </div>
         </div>
       </article>`;

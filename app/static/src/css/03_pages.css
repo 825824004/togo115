@@ -968,3 +968,67 @@ legend {
 .tag.writeback { color: var(--accent, #5ad1c9); }
 .tag.auto_subscribed { color: var(--amber, #ffb454); }
 
+/* Episode missing-list popup (M1 state machine) */
+.episode-states-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1.5rem;
+}
+.episode-states-modal {
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 14px;
+  width: min(560px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  padding: 1.1rem 1.25rem 1.4rem;
+}
+.episode-states-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.episode-states-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.episode-states-close {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-soft, #64748b);
+}
+.episode-states-summary {
+  margin: 0.6rem 0 0.9rem;
+  color: var(--ink-soft, #64748b);
+  font-size: 0.9rem;
+}
+.episode-states-ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.episode-range {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--amber, #ffb454) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber, #ffb454) 45%, transparent);
+  color: var(--ink, #0f172a);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.episode-range.complete {
+  background: color-mix(in srgb, var(--accent, #5ad1c9) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #5ad1c9) 45%, transparent);
+}
+

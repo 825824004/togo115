@@ -46,6 +46,12 @@ async def sync_subscriptions_with_emby_snapshot(subscriptions: list[dict], snaps
                 continue
             _update_subscription_state(conn, subscription["id"], state, now)
             updated += 1
+            try:
+                from app.services.subscription.episode_state import recompute_missing
+
+                recompute_missing(int(subscription["id"]))
+            except Exception:
+                pass
 
     if updated:
         add_log("info", "emby", "订阅入库状态已同步", {"updated": updated, "matched": matched, "completed": completed_removed})

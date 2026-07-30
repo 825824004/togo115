@@ -49,6 +49,15 @@ from app.services.subscription.search.tasks import (
     schedule_search_all_active_subscriptions,
     schedule_subscription_search,
 )
+from app.services.subscription.episode_state import (
+    completion_state as subscription_completion_state,
+    episode_states_for,
+    mark_delivered as mark_episode_delivered,
+    mark_in_library as mark_episode_in_library,
+    mark_matched as mark_episode_matched,
+    mark_upgraded as mark_episode_upgraded,
+    recompute_missing as recompute_subscription_episodes,
+)
 
 
 async def retry_failed_resources(limit: int = 20) -> dict:
@@ -96,4 +105,11 @@ __all__ = [
     "duplicate_subscription",
     "library_snapshot_or_none",
     "mark_subscription_checked",
+    "recompute_subscription_episodes",
+    "mark_episode_in_library",
+    "mark_episode_matched",
+    "mark_episode_delivered",
+    "mark_episode_upgraded",
+    "episode_states_for",
+    "subscription_completion_state",
 ]

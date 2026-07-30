@@ -38,6 +38,12 @@ def update_subscription(subscription_id: int, payload: SubscriptionUpdate) -> di
     values = list(data.values()) + [utc_now(), subscription_id]
     with db() as conn:
         conn.execute(f"UPDATE subscriptions SET {sets}, updated_at = ? WHERE id = ?", values)
+    try:
+        from app.services.subscription.episode_state import recompute_missing
+
+        recompute_missing(subscription_id)
+    except Exception as exc:
+        add_log("warning", "episode_state", "更新订阅后刷新缺失清单状态失败", {"id": subscription_id, "error": str(exc)})
     add_log("info", "subscription", "订阅已更新", {"id": subscription_id})
     from app.services.subscription.crud.rows import invalidate_subscription_list_cache as _inv_sub_list
     _inv_sub_list()
