@@ -165,6 +165,58 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_historical_messages",
+            "description": "在 Telegram 历史消息缓存库中按关键词检索已监控频道/群组的消息（含 115 分享链接的资源），用于本地快速找资源而无需重复请求 TG API。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜索关键词，如剧名或资源名"},
+                    "limit": {"type": "integer", "description": "最多返回条数，默认 20，最大 100"},
+                    "only_115": {"type": "boolean", "description": "仅返回含 115 分享链接的消息，默认 false"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "subscribe_douban_chart",
+            "description": "订阅豆瓣榜单（热门电影/热门剧集）。自动抓取榜单并批量创建订阅，已存在则跳过。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["movie", "tv"],
+                        "description": "movie=热门电影, tv=热门剧集，默认 movie",
+                    },
+                    "limit": {"type": "integer", "description": "抓取前 N 条，默认 20，最大 100"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "subscribe_maoyan_chart",
+            "description": "订阅猫眼榜单（热映/待映/票房榜）。自动抓取榜单并批量创建电影订阅，已存在则跳过。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["hot", "coming", "boxoffice"],
+                        "description": "hot=热映, coming=待映, boxoffice=票房榜，默认 hot",
+                    },
+                    "limit": {"type": "integer", "description": "抓取前 N 条，默认 20，最大 100"},
+                },
+            },
+        },
+    },
 ]
 
 
@@ -189,6 +241,12 @@ async def execute_tool(name: str, arguments: dict[str, Any] | str | None) -> dic
             return await _tool_list_resources(args)
         if name == "get_system_overview":
             return await _tool_overview()
+        if name == "search_historical_messages":
+            return await _tool_search_history(args)
+        if name == "subscribe_douban_chart":
+            return await _tool_subscribe_chart("douban", args)
+        if name == "subscribe_maoyan_chart":
+            return await _tool_subscribe_chart("maoyan", args)
         return {"ok": False, "error": f"未知工具: {name}"}
     except Exception as exc:  # noqa: BLE001 - surface tool errors to the model
         return {"ok": False, "error": str(exc), "tool": name}
@@ -367,3 +425,33 @@ async def _tool_overview() -> dict[str, Any]:
         "recent_resources": len(resources),
         "failed_tasks": len(failed),
     }
+
+
+async def _tool_search_history(args: dict[str, Any]) -> dict[str, Any]:
+    query = str(args.get("query") or "").strip()
+    if not query:
+        return {"ok": False, "error": "query 不能为空"}
+    limit = max(1, min(int(args.get("limit") or 20), 100))
+    only_115 = bool(args.get("only_115"))
+    from app.services import history_cache
+
+    results = history_cache.search_historical_messages(query, limit=limit, only_with_115=only_115)
+    compact = [
+        {
+            "source": item.get("source"),
+            "message_id": item.get("message_id"),
+            "message_date": item.get("message_date"),
+            "has_115": item.get("has_115"),
+            "text": (item.get("text") or "")[:300],
+        }
+        for item in results
+    ]
+    return {"ok": True, "query": query, "count": len(compact), "results": compact}
+
+
+async def _tool_subscribe_chart(platform: str, args: dict[str, Any]) -> dict[str, Any]:
+    kind = str(args.get("kind") or ("movie" if platform == "douban" else "hot")).strip()
+    limit = max(1, min(int(args.get("limit") or 20), 100))
+    from app.services import charts
+
+    return await charts.subscribe_chart(platform, kind, limit)

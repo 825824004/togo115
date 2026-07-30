@@ -66,6 +66,13 @@ async function renderAiChat() {
         </div>
       </form>
 
+      <form class="ai-history-bar" onsubmit="aiHistorySearch(event)">
+        <input id="aiHistoryQuery" placeholder="在历史消息缓存库搜索资源（如剧名/关键词）" />
+        <button type="submit">搜索</button>
+        <label class="mini-check"><input type="checkbox" id="aiHistory115" /> 仅含 115 链接</label>
+      </form>
+      <div class="ai-history-results hidden" id="aiHistoryResults"></div>
+
       <div class="ai-thread" id="aiThread"></div>
 
       <div class="ai-composer">
@@ -163,6 +170,39 @@ function bindAiChat() {
       aiSend(btn.dataset.quick);
     });
   });
+}
+
+async function aiHistorySearch(event) {
+  event.preventDefault();
+  const q = String(document.getElementById("aiHistoryQuery")?.value || "").trim();
+  const panel = document.getElementById("aiHistoryResults");
+  if (!panel || !q) return;
+  const only115 = document.getElementById("aiHistory115")?.checked ? 1 : 0;
+  panel.classList.remove("hidden");
+  panel.innerHTML = `<div class="empty">搜索中…</div>`;
+  try {
+    const data = await api(`/api/history/search?q=${encodeURIComponent(q)}&only_115=${only115}&limit=30`);
+    const results = (data.results || []).slice(0, 30);
+    if (!results.length) {
+      panel.innerHTML = `<div class="empty">缓存库中没有匹配「${escapeHtml(q)}」的消息</div>`;
+      return;
+    }
+    panel.innerHTML = results
+      .map((r) => {
+        const text = (r.text || "").slice(0, 240).replace(/\n+/g, " ");
+        return `<article class="ai-history-item">
+          <div class="ai-history-meta">
+            <span class="tag ${r.has_115 ? "has-115" : ""}">${r.has_115 ? "115" : "MSG"}</span>
+            <span class="muted">${escapeHtml(r.source || "")}</span>
+            ${r.message_date ? `<span class="muted">${escapeHtml(String(r.message_date).slice(0, 10))}</span>` : ""}
+          </div>
+          <p>${escapeHtml(text)}</p>
+        </article>`;
+      })
+      .join("");
+  } catch (error) {
+    panel.innerHTML = `<div class="empty">搜索失败：${escapeHtml(error.message || "未知错误")}</div>`;
+  }
 }
 
 async function saveAiSettings(event) {

@@ -8,7 +8,7 @@ import qrcode
 
 from app.auth import current_user
 from app.db import init_db
-from app.routers import ai, auth, integrations, media, settings, subscriptions, system
+from app.routers import ai, auth, charts, emby_webhook, history, integrations, media, settings, subscriptions, system
 from app.services.monitor import monitor_service
 
 class AppStaticFiles(StaticFiles):
@@ -33,6 +33,9 @@ app.include_router(media.router)
 app.include_router(integrations.router)
 app.include_router(system.router)
 app.include_router(ai.router)
+app.include_router(emby_webhook.router)
+app.include_router(history.router)
+app.include_router(charts.router)
 
 
 @app.on_event("startup")

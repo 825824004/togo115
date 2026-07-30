@@ -25,6 +25,8 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     _delete_duplicate_resources(conn)
     _ensure_background_jobs(conn)
     _ensure_indexes(conn)
+    _ensure_emby_webhook_events(conn)
+    _ensure_subscription_auto_source_columns(conn)
 
 
 _SUBSCRIPTION_COLUMNS = {
@@ -217,6 +219,49 @@ def _ensure_background_jobs(conn: sqlite3.Connection) -> None:
         {
             "heartbeat_at": "TEXT",
             "worker_id": "TEXT",
+        },
+    )
+
+
+def _ensure_emby_webhook_events(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS emby_webhook_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            item_type TEXT,
+            title TEXT,
+            year INTEGER,
+            series_name TEXT,
+            season INTEGER,
+            episode INTEGER,
+            item_id TEXT,
+            tmdb_id INTEGER,
+            matched_subscription_id INTEGER,
+            action TEXT NOT NULL,
+            detail TEXT,
+            payload TEXT,
+            received_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_emby_webhook_events_received
+            ON emby_webhook_events(received_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_emby_webhook_events_matched
+            ON emby_webhook_events(matched_subscription_id);
+        """
+    )
+
+
+def _ensure_subscription_auto_source_columns(conn: sqlite3.Connection) -> None:
+    ensure_columns(
+        conn,
+        "subscriptions",
+        {
+            "auto_source": "TEXT",
+            "auto_source_detail": "TEXT",
         },
     )
 

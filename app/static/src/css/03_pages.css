@@ -850,3 +850,121 @@ legend {
   grid-column: 1 / -1;
 }
 
+/* Emby Webhook 配置卡 */
+.emby-webhook-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius, 8px);
+  padding: 1rem 1.1rem;
+  margin-top: 0.9rem;
+}
+.emby-webhook-url {
+  display: block;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px dashed var(--accent, #5ad1c9);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
+  word-break: break-all;
+  color: var(--ink);
+  margin: 0.4rem 0 0.7rem;
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.35rem 0;
+  font-size: 0.9rem;
+}
+.switch-row.sub {
+  margin-left: 1.4rem;
+  opacity: 0.9;
+}
+.emby-webhook-token input {
+  width: 100%;
+  margin-top: 0.3rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 0.4rem 0.55rem;
+}
+.emby-webhook-events {
+  margin-top: 0.8rem;
+  border-top: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  padding-top: 0.6rem;
+}
+.emby-webhook-events h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.event-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.2rem 0;
+}
+
+/* 历史缓存搜索（AI 页） */
+.ai-history-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.6rem 0.2rem 0.4rem;
+}
+.ai-history-bar input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 0.5rem 0.7rem;
+}
+.ai-history-bar .mini-check {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.ai-history-results {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow: auto;
+  padding: 0.4rem 0.2rem;
+}
+.ai-history-item {
+  background: var(--glass);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+.ai-history-meta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+.ai-history-item p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.tag.has-115 {
+  background: color-mix(in srgb, var(--accent, #5ad1c9) 30%, transparent);
+  border-color: var(--accent, #5ad1c9);
+  color: var(--accent, #5ad1c9);
+}
+.event-row .tag {
+  font-size: 0.72rem;
+  padding: 0.05rem 0.4rem;
+}
+.tag.writeback { color: var(--accent, #5ad1c9); }
+.tag.auto_subscribed { color: var(--amber, #ffb454); }
+

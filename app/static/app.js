@@ -955,8 +955,56 @@ async function renderEmby() {
         <section class="section emby-history-section"><div class="section-heading"><h3>观看历史</h3><span>${(data.history || []).length} 条</span></div>${embyGrid(data.history, "暂无观看历史", "history")}</section>
         <section class="section emby-user-section"><div class="section-heading"><h3>用户</h3><span>${(data.users || []).length} 个</span></div>${embyGrid(data.users, "暂无用户数据", "user")}</section>
       </div>
+      <aside class="emby-webhook-card" id="embyWebhookCard">
+        <div class="section-heading"><h3>Emby Webhook</h3><span>实时回写入库状态 · 自动订阅新媒体</span></div>
+        <div id="embyWebhookBody"><div class="empty">加载中…</div></div>
+      </aside>
     </section>
   `;
+  loadEmbyWebhookCard();
+}
+
+async function loadEmbyWebhookCard() {
+  const body = document.getElementById("embyWebhookBody");
+  if (!body) return;
+  const status = await apiQuick("/api/emby/webhook/status", { ok: true, config: {}, recent_events: [] });
+  const cfg = status.config || {};
+  const host = location.origin;
+  body.innerHTML = `
+    <p class="muted">将下方地址填入 Emby 的 Webhook 插件（通知类型选「项目添加 / Library.NewItem」）：</p>
+    <code class="emby-webhook-url">${escapeHtml(host)}/api/emby/webhook</code>
+    <label class="switch-row"><input type="checkbox" id="ewEnabled" ${cfg.enabled ? "checked" : ""}/> <span>启用 Webhook</span></label>
+    <label class="switch-row"><input type="checkbox" id="ewAuto" ${cfg.auto_subscribe ? "checked" : ""}/> <span>新媒体自动创建订阅</span></label>
+    <label class="switch-row sub"><input type="checkbox" id="ewMovies" ${cfg.auto_subscribe_movies !== false ? "checked" : ""}/> <span>自动订阅电影</span></label>
+    <label class="switch-row sub"><input type="checkbox" id="ewSeries" ${cfg.auto_subscribe_series !== false ? "checked" : ""}/> <span>自动订阅剧集</span></label>
+    <label class="switch-row"><input type="checkbox" id="ewMatch" ${cfg.match_existing !== false ? "checked" : ""}/> <span>回写已有订阅的入库状态</span></label>
+    <label class="emby-webhook-token">共享密钥（可选，与 Emby Webhook 的 Token 字段一致）
+      <input type="text" id="ewToken" placeholder="留空则不校验" value="${escapeHtml(cfg.token || "")}" />
+    </label>
+    <div class="inline-actions">
+      <button type="button" id="ewSave">保存配置</button>
+    </div>
+    <div class="emby-webhook-events">
+      <h4>最近事件</h4>
+      ${(status.recent_events || []).slice(0, 6).map((e) => `<div class="event-row"><span class="tag ${e.action}">${e.action}</span> ${escapeHtml(e.title || "")}</div>`).join("") || '<div class="muted">暂无事件</div>'}
+    </div>
+  `;
+  const save = document.getElementById("ewSave");
+  if (save) save.addEventListener("click", saveEmbyWebhook);
+}
+
+async function saveEmbyWebhook() {
+  const value = {
+    enabled: document.getElementById("ewEnabled").checked,
+    auto_subscribe: document.getElementById("ewAuto").checked,
+    auto_subscribe_movies: document.getElementById("ewMovies").checked,
+    auto_subscribe_series: document.getElementById("ewSeries").checked,
+    match_existing: document.getElementById("ewMatch").checked,
+    token: document.getElementById("ewToken").value.trim(),
+  };
+  await api("/api/emby/webhook/settings", { method: "PUT", body: JSON.stringify({ value }) });
+  toast("Emby Webhook 配置已保存");
+  loadEmbyWebhookCard();
 }
 
 function simpleList(items, empty) {
@@ -2695,6 +2743,13 @@ async function renderAiChat() {
         </div>
       </form>
 
+      <form class="ai-history-bar" onsubmit="aiHistorySearch(event)">
+        <input id="aiHistoryQuery" placeholder="在历史消息缓存库搜索资源（如剧名/关键词）" />
+        <button type="submit">搜索</button>
+        <label class="mini-check"><input type="checkbox" id="aiHistory115" /> 仅含 115 链接</label>
+      </form>
+      <div class="ai-history-results hidden" id="aiHistoryResults"></div>
+
       <div class="ai-thread" id="aiThread"></div>
 
       <div class="ai-composer">
@@ -2792,6 +2847,39 @@ function bindAiChat() {
       aiSend(btn.dataset.quick);
     });
   });
+}
+
+async function aiHistorySearch(event) {
+  event.preventDefault();
+  const q = String(document.getElementById("aiHistoryQuery")?.value || "").trim();
+  const panel = document.getElementById("aiHistoryResults");
+  if (!panel || !q) return;
+  const only115 = document.getElementById("aiHistory115")?.checked ? 1 : 0;
+  panel.classList.remove("hidden");
+  panel.innerHTML = `<div class="empty">搜索中…</div>`;
+  try {
+    const data = await api(`/api/history/search?q=${encodeURIComponent(q)}&only_115=${only115}&limit=30`);
+    const results = (data.results || []).slice(0, 30);
+    if (!results.length) {
+      panel.innerHTML = `<div class="empty">缓存库中没有匹配「${escapeHtml(q)}」的消息</div>`;
+      return;
+    }
+    panel.innerHTML = results
+      .map((r) => {
+        const text = (r.text || "").slice(0, 240).replace(/\n+/g, " ");
+        return `<article class="ai-history-item">
+          <div class="ai-history-meta">
+            <span class="tag ${r.has_115 ? "has-115" : ""}">${r.has_115 ? "115" : "MSG"}</span>
+            <span class="muted">${escapeHtml(r.source || "")}</span>
+            ${r.message_date ? `<span class="muted">${escapeHtml(String(r.message_date).slice(0, 10))}</span>` : ""}
+          </div>
+          <p>${escapeHtml(text)}</p>
+        </article>`;
+      })
+      .join("");
+  } catch (error) {
+    panel.innerHTML = `<div class="empty">搜索失败：${escapeHtml(error.message || "未知错误")}</div>`;
+  }
 }
 
 async function saveAiSettings(event) {
