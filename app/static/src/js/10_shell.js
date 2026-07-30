@@ -165,6 +165,7 @@ function renderView() {
   if (state.view === "tmdb") renderTmdb();
   if (state.view === "emby") renderEmby();
   if (state.view === "subscriptions") renderSubscriptions();
+  if (state.view === "ai") renderAiChat();
   if (state.view === "logs") renderLogs();
   if (state.view === "settings") renderSettings();
 }

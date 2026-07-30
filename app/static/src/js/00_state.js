@@ -1,4 +1,4 @@
-const VIEW_KEYS = ["tmdb", "emby", "subscriptions", "logs", "settings"];
+const VIEW_KEYS = ["tmdb", "emby", "subscriptions", "logs", "ai", "settings"];
 const SETTINGS_TAB_KEYS = ["credentials", "delivery", "115", "telegram", "tmdb", "proxy", "rss_sources", "tg_bot", "emby", "backup"];
 const TMDB_MORE_MIN_PAGE_SIZE = 40;
 const BUILTIN_RSS_PLUGINS = new Set(["bt1207", "qmp4", "haisou"]);
@@ -53,6 +53,7 @@ const navItems = [
   ["tmdb", "TMDB", "片单", "TM"],
   ["emby", "Emby", "媒体库", "Em"],
   ["subscriptions", "订阅", "追新", "订"],
+  ["ai", "AI 助手", "对话", "AI"],
   ["logs", "日志", "事件", "Log"],
   ["settings", "设置", "配置", "设"],
 ];

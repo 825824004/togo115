@@ -23,6 +23,7 @@ JS_FILES = [
     "63_settings_sources_actions.js",
     "64_settings_actions.js",
     "70_integrations.js",
+    "80_ai_chat.js",
 ]
 
 CSS_FILES = [
@@ -30,6 +31,7 @@ CSS_FILES = [
     "01_base_layout.css",
     "02_components.css",
     "03_pages.css",
+    "04_ai_chat.css",
     "10_desktop_shell.css",
     "20_tablet.css",
     "30_mobile.css",

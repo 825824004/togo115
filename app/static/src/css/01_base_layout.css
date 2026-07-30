@@ -710,3 +710,51 @@ a:hover { text-decoration: underline; }
   padding: 20px;
   background: rgba(0, 0, 0, .72);
 }
+
+/* 全局精致增强：玻璃光晕与微交互 */
+::selection {
+  background: rgba(45, 212, 191, .32);
+  color: #eafffb;
+}
+
+.section,
+.card,
+.page-heading,
+.tmdb-hero,
+.subscription-toolbar,
+.toolbar,
+.log-toolbar,
+.media-section {
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.section:hover,
+.card:hover,
+.page-heading:hover,
+.tmdb-hero:hover,
+.subscription-toolbar:hover,
+.media-section:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-soft), 0 0 0 1px rgba(45, 212, 191, .10), 0 20px 46px rgba(45, 212, 191, .07);
+}
+
+.stat {
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.stat:hover {
+  transform: translateY(-2px);
+  border-color: rgba(45, 212, 191, .28);
+  box-shadow: 0 0 0 1px rgba(45, 212, 191, .14), var(--shadow-soft);
+}
+
+button:active {
+  transform: translateY(0) scale(.98);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(45, 212, 191, .72);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, .16);
+}

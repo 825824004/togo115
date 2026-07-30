@@ -18,8 +18,13 @@
   --shadow: 0 22px 58px rgba(0, 0, 0, .38);
   --shadow-soft: 0 14px 34px rgba(0, 0, 0, .26);
   --radius: 8px;
+  --radius-lg: 14px;
   --sidebar-width: 116px;
   --sidebar-mini: 76px;
+  --glass: rgba(255, 255, 255, .05);
+  --glass-strong: rgba(255, 255, 255, .08);
+  --glow-brand: 0 0 0 1px rgba(45, 212, 191, .16), 0 18px 44px rgba(45, 212, 191, .08);
+  --grid-line: rgba(255, 255, 255, .022);
   font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
 }
 
@@ -56,9 +61,23 @@ body {
   min-height: 100vh;
   color: var(--ink);
   background:
-    linear-gradient(180deg, rgba(45, 212, 191, .06), transparent 28rem),
+    radial-gradient(900px 620px at 12% -8%, rgba(45, 212, 191, .13), transparent 60%),
+    radial-gradient(820px 560px at 100% 0%, rgba(244, 182, 63, .10), transparent 55%),
+    radial-gradient(760px 720px at 90% 108%, rgba(232, 104, 74, .07), transparent 60%),
     linear-gradient(135deg, #080d0f 0%, #0d1417 48%, #101719 100%);
+  background-attachment: fixed;
   font-size: 14px;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
 }
 
 button,

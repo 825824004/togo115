@@ -8,7 +8,7 @@ import qrcode
 
 from app.auth import current_user
 from app.db import init_db
-from app.routers import auth, integrations, media, settings, subscriptions, system
+from app.routers import ai, auth, integrations, media, settings, subscriptions, system
 from app.services.monitor import monitor_service
 
 class AppStaticFiles(StaticFiles):
@@ -32,6 +32,7 @@ app.include_router(subscriptions.router)
 app.include_router(media.router)
 app.include_router(integrations.router)
 app.include_router(system.router)
+app.include_router(ai.router)
 
 
 @app.on_event("startup")
