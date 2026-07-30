@@ -29,6 +29,7 @@ class SubscriptionCreate(BaseModel):
     quality_rules: dict[str, Any] = Field(default_factory=dict)
     delivery_mode: Literal["115", "telegram_bot"] = "115"
     target_path: str | None = None
+    upgrade_window_days: int = Field(default=0, ge=0, le=365)
 
 
 class SubscriptionUpdate(BaseModel):
@@ -39,6 +40,7 @@ class SubscriptionUpdate(BaseModel):
     target_path: str | None = None
     release_year: int | None = Field(default=None, ge=1900, le=2100)
     status: Literal["active", "paused", "completed"] | None = None
+    upgrade_window_days: int | None = Field(default=None, ge=0, le=365)
 
 
 class SubscriptionBulkDeleteRequest(BaseModel):

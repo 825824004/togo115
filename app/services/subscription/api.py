@@ -59,6 +59,7 @@ from app.services.subscription.episode_state import (
     mark_upgraded as mark_episode_upgraded,
     recompute_missing as recompute_subscription_episodes,
 )
+from app.services.subscription.upgrade import maybe_upgrade as maybe_upgrade_resource, quality_rank as resource_quality_rank
 
 
 async def retry_failed_resources(limit: int = 20) -> dict:
@@ -114,4 +115,6 @@ __all__ = [
     "episode_states_for",
     "subscription_completion_state",
     "mark_episode_matched_episodes",
+    "maybe_upgrade_resource",
+    "resource_quality_rank",
 ]

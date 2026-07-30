@@ -76,6 +76,20 @@ def _update_resource_delivery_status(resource_id: int, ok: bool, error_message: 
             """,
             ("delivered" if ok else failed_status, 1 if ok else 0, None if ok else error_message[:500], utc_now(), resource_id),
         )
+        if ok:
+            # M4: once delivered, open/check the quality upgrade window. Never supersede
+            # before the replacement is actually delivered (this runs post-success).
+            try:
+                from app.services.subscription.upgrade import maybe_upgrade
+
+                maybe_upgrade(conn, resource_id)
+            except Exception as exc:  # pragma: no cover - defensive
+                add_log(
+                    "warning",
+                    "subscription",
+                    "洗版期升级检查异常，已忽略",
+                    {"resource_id": resource_id, "error": str(exc)},
+                )
 
 
 def delivery_failed_status(error_message: str) -> str:

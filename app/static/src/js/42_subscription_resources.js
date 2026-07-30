@@ -76,19 +76,21 @@ function resourceTable() {
       </div>
     </div>
     <div class="resource-list ${state.resourceDeleteMode ? "selecting" : ""}">
-      ${visibleResources.map((item) => {
+      ${      visibleResources.map((item) => {
         const title = item.display_title || item.subscription_title || item.title || "资源";
         const groupCount = Number(item.group_count || 1);
         const status = resourceStatusLabel(item.status);
         const statusClass = resourceStatusClass(item.status);
         const url = String(item.url || "");
         const checked = state.selectedResourceIds.has(Number(item.id)) ? "checked" : "";
+        const superseded = item.superseded_by ? `<span class="resource-status superseded" title="已被更高画质资源取代">已淘汰</span>` : "";
+        const qualityChip = (item.quality_rank != null && !item.superseded_by) ? `<span class="resource-quality" title="画质评分">${Number(item.quality_rank).toFixed(0)}</span>` : "";
         return `<details class="resource-item">
           <summary>
             ${state.resourceDeleteMode ? `<label class="resource-select" onclick="event.stopPropagation()"><input type="checkbox" data-select-resource="${item.id}" ${checked} /><span></span></label>` : ""}
             <span class="resource-source">${resourceSourceHtml(item.source)}</span>
             <span class="resource-title-cell"><strong>${escapeHtml(title)}</strong>${groupCount > 1 ? `<span class="resource-group-count">${groupCount}</span>` : ""}</span>
-            <span class="resource-status ${statusClass}">${escapeHtml(status)}</span>
+            <span class="resource-meta">${qualityChip}${superseded}<span class="resource-status ${statusClass}">${escapeHtml(status)}</span></span>
           </summary>
           <div class="resource-details">
             <div><span>链接</span><a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url || "空链接")}</a></div>

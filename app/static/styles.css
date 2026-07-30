@@ -1803,6 +1803,30 @@ textarea:focus {
   background: var(--ok);
 }
 
+.resource-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
+.resource-quality {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #0e1c2b;
+  background: linear-gradient(135deg, #7fe0ff, #5bb8ff);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.resource-status.superseded {
+  color: #2a1500;
+  background: rgba(255, 188, 92, .9);
+}
 
 .resource-group-count {
   flex: 0 0 auto;

@@ -1487,6 +1487,8 @@ async function editQualityRules(subscription) {
   if (groups === null) return;
   const acceptMode = prompt("资源形式：all=全部，pack=只要合集，single=只要单集", rules.accept_mode || "all");
   if (acceptMode === null) return;
+  const upgradeWindow = prompt("洗版期（天）：资源入库后多少天内允许追更高画质自动补下，0 表示关闭", String(subscription.upgrade_window_days || 0));
+  if (upgradeWindow === null) return;
   const split = (value) => value.split(/[,，\n\r]+/).map((item) => item.trim()).filter(Boolean);
   const qualityRules = {
     preferred_quality: split(preferred),
@@ -1494,7 +1496,11 @@ async function editQualityRules(subscription) {
     release_groups: split(groups),
     accept_mode: ["all", "pack", "single"].includes(String(acceptMode).trim().toLowerCase()) ? String(acceptMode).trim().toLowerCase() : "all",
   };
-  await api(`/api/subscriptions/${subscription.id}`, { method: "PUT", body: JSON.stringify({ quality_rules: qualityRules }) });
+  const payload = {
+    quality_rules: qualityRules,
+    upgrade_window_days: Math.max(0, Math.min(365, parseInt(upgradeWindow, 10) || 0)),
+  };
+  await api(`/api/subscriptions/${subscription.id}`, { method: "PUT", body: JSON.stringify(payload) });
   await refreshSubscriptionData();
   renderSubscriptions();
   toast("质量规则已保存");
@@ -1579,19 +1585,21 @@ function resourceTable() {
       </div>
     </div>
     <div class="resource-list ${state.resourceDeleteMode ? "selecting" : ""}">
-      ${visibleResources.map((item) => {
+      ${      visibleResources.map((item) => {
         const title = item.display_title || item.subscription_title || item.title || "资源";
         const groupCount = Number(item.group_count || 1);
         const status = resourceStatusLabel(item.status);
         const statusClass = resourceStatusClass(item.status);
         const url = String(item.url || "");
         const checked = state.selectedResourceIds.has(Number(item.id)) ? "checked" : "";
+        const superseded = item.superseded_by ? `<span class="resource-status superseded" title="已被更高画质资源取代">已淘汰</span>` : "";
+        const qualityChip = (item.quality_rank != null && !item.superseded_by) ? `<span class="resource-quality" title="画质评分">${Number(item.quality_rank).toFixed(0)}</span>` : "";
         return `<details class="resource-item">
           <summary>
             ${state.resourceDeleteMode ? `<label class="resource-select" onclick="event.stopPropagation()"><input type="checkbox" data-select-resource="${item.id}" ${checked} /><span></span></label>` : ""}
             <span class="resource-source">${resourceSourceHtml(item.source)}</span>
             <span class="resource-title-cell"><strong>${escapeHtml(title)}</strong>${groupCount > 1 ? `<span class="resource-group-count">${groupCount}</span>` : ""}</span>
-            <span class="resource-status ${statusClass}">${escapeHtml(status)}</span>
+            <span class="resource-meta">${qualityChip}${superseded}<span class="resource-status ${statusClass}">${escapeHtml(status)}</span></span>
           </summary>
           <div class="resource-details">
             <div><span>链接</span><a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url || "空链接")}</a></div>

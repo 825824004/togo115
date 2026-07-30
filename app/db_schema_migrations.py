@@ -49,12 +49,16 @@ _SUBSCRIPTION_COLUMNS = {
     "in_library": "INTEGER NOT NULL DEFAULT 0",
     "completed_at": "TEXT",
     "last_checked_at": "TEXT",
+    "upgrade_window_days": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _RESOURCE_COLUMNS = {
     "retry_count": "INTEGER NOT NULL DEFAULT 0",
     "last_error": "TEXT",
     "updated_at": "TEXT",
+    "quality_rank": "REAL",
+    "superseded_by": "INTEGER",
+    "delivered_at": "TEXT",
 }
 
 
