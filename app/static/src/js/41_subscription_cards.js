@@ -66,6 +66,7 @@ function subscriptionCards() {
           <div class="subscription-card-actions">
             <button type="button" class="keyword-chip" data-edit="${item.id}" title="${escapeHtml(keywords)}">关键词</button>
             <button type="button" class="keyword-chip" data-edit-rules="${item.id}">规则</button>
+            <button type="button" class="keyword-chip tg" data-telegram-search="${item.id}" title="针对此订阅立即跑一次 TG 搜索">TG 搜索</button>
             ${item.media_type === "tv" ? `<button type="button" class="keyword-chip" data-episode-states="${item.id}" title="查看缺失清单">缺失清单</button>` : ""}
           </div>
         </div>

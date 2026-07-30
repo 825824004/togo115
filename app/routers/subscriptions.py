@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.auth import current_user
 from app.schemas import ResourceBulkDeleteRequest, SearchRequest, SubscriptionBulkDeleteRequest, SubscriptionCreate, SubscriptionUpdate
@@ -24,6 +26,7 @@ from app.services.jobs import list_jobs
 from app.services.manual_search import manual_search_resources
 from app.services.resource_queries import clear_resources, delete_resources, list_recent_resources
 from app.services.subscription.episode_state import completion_state, episode_states_for
+from app.services.subscription.search.service import search_and_attach_resources
 
 
 router = APIRouter()
@@ -74,6 +77,41 @@ async def search_subscription(subscription_id: int, user: dict = Depends(current
     if not await asyncio.to_thread(get_subscription, subscription_id):
         raise HTTPException(status_code=404, detail="订阅不存在")
     return schedule_subscription_search(subscription_id)
+
+
+class TelegramSearchRequest(BaseModel):
+    only_missing: bool = False
+
+
+@router.post("/api/subscriptions/{subscription_id}/search/telegram")
+async def search_subscription_telegram(
+    subscription_id: int,
+    payload: TelegramSearchRequest | None = None,
+    user: dict = Depends(current_user),
+) -> dict:
+    """Interactive Telegram search for a single subscription (M5).
+
+    Reuses the existing ``search_and_attach_resources`` pipeline (TG-first then
+    fallback) instead of re-implementing search logic. When ``only_missing`` is
+    set and the TV subscription already has every episode accounted for we skip
+    the TG API call entirely.
+    """
+    sub = await asyncio.to_thread(get_subscription, subscription_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="订阅不存在")
+    only_missing = bool(payload.only_missing) if payload else False
+    if only_missing and str(sub.get("media_type") or "") == "tv":
+        from app.services.subscription.episode.keys import missing_episode_keys
+
+        if not missing_episode_keys(sub):
+            return {"ok": True, "skipped": True, "reason": "no_missing_episodes", "created": []}
+    created = await search_and_attach_resources(subscription_id)
+    return {
+        "ok": True,
+        "subscription_id": subscription_id,
+        "created_count": len(created),
+        "created": [_compact_resource(item) for item in created],
+    }
 
 
 @router.get("/api/resources")
@@ -136,3 +174,12 @@ async def retry_failed_tasks(user: dict = Depends(current_user)) -> dict:
 @router.post("/api/search")
 async def manual_search(payload: SearchRequest, user: dict = Depends(current_user)) -> dict:
     return await manual_search_resources(payload)
+
+
+def _compact_resource(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "resource_id": item.get("resource_id"),
+        "title": item.get("title"),
+        "source": item.get("source"),
+        "status": item.get("status"),
+    }

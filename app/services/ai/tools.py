@@ -217,6 +217,24 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_subscription_telegram",
+            "description": "对指定订阅立即触发一次 Telegram 资源搜索（交互式 TG 搜索）：优先检索 TG 消息缓存并落库命中资源，可选仅搜索缺集。返回本次新增的资源数与订阅摘要。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subscription_id": {"type": "integer", "description": "订阅 ID"},
+                    "only_missing": {
+                        "type": "boolean",
+                        "description": "仅搜索缺集（电视剧适用），默认 false",
+                    },
+                },
+                "required": ["subscription_id"],
+            },
+        },
+    },
 ]
 
 
@@ -247,6 +265,8 @@ async def execute_tool(name: str, arguments: dict[str, Any] | str | None) -> dic
             return await _tool_subscribe_chart("douban", args)
         if name == "subscribe_maoyan_chart":
             return await _tool_subscribe_chart("maoyan", args)
+        if name == "search_subscription_telegram":
+            return await _tool_search_subscription_telegram(args)
         return {"ok": False, "error": f"未知工具: {name}"}
     except Exception as exc:  # noqa: BLE001 - surface tool errors to the model
         return {"ok": False, "error": str(exc), "tool": name}
@@ -455,3 +475,26 @@ async def _tool_subscribe_chart(platform: str, args: dict[str, Any]) -> dict[str
     from app.services import charts
 
     return await charts.subscribe_chart(platform, kind, limit)
+
+
+async def _tool_search_subscription_telegram(args: dict[str, Any]) -> dict[str, Any]:
+    subscription_id = int(args.get("subscription_id") or 0)
+    if not subscription_id:
+        return {"ok": False, "error": "subscription_id 无效"}
+    existing = app_actions.get_subscription(subscription_id)
+    if not existing:
+        return {"ok": False, "error": "订阅不存在"}
+    only_missing = bool(args.get("only_missing"))
+    if only_missing and str(existing.get("media_type") or "") == "tv":
+        from app.services.subscription.episode.keys import missing_episode_keys
+
+        if not missing_episode_keys(existing):
+            return {"ok": True, "skipped": True, "reason": "no_missing_episodes", "created_count": 0}
+    from app.services.subscription.search.service import search_and_attach_resources
+
+    created = await search_and_attach_resources(subscription_id)
+    return {
+        "ok": True,
+        "subscription": _compact_subscription(existing),
+        "created_count": len(created),
+    }

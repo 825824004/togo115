@@ -5,6 +5,12 @@ from typing import Any
 
 from app.db import add_log, db, json_dumps, utc_now
 from app.services.integration_state import get_setting
+from app.services.subscription.crud.rows import get_subscription
+from app.services.subscription.episode_state import (
+    completion_state,
+    mark_in_library as mark_episode_in_library,
+    recompute_missing as recompute_subscription_episodes,
+)
 from app.services.subscription.match.matching import compact_match_text
 
 
@@ -207,6 +213,43 @@ def _writeback_subscription(subscription: dict, event: dict[str, Any]) -> None:
                 "UPDATE subscriptions SET in_library = 1, emby_count = MAX(emby_count, ?), updated_at = ? WHERE id = ?",
                 (new_count, now, sub_id),
             )
+    # M3 -> M1 bridge: keep the per-episode state machine in sync with Emby imports.
+    _bridge_to_episode_state(sub_id, media_type, event)
+
+
+def _bridge_to_episode_state(subscription_id: int, media_type: str | None, event: dict[str, Any]) -> None:
+    """Sync the M1 per-episode state machine with an Emby import event.
+
+    For a TV episode add with explicit season/episode we mark that single
+    episode in-library. For a series/season level add (no episode number) we
+    recompute the whole missing list from the owned set. When every expected
+    episode is in the library we close the loop by completing the subscription.
+    """
+    if media_type != "tv":
+        return
+    season = event.get("season")
+    episode = event.get("episode")
+    if season and episode:
+        mark_episode_in_library(subscription_id, (season, episode))
+    else:
+        recompute_subscription_episodes(subscription_id)
+    sub = get_subscription(subscription_id)
+    if not sub:
+        return
+    comp = completion_state(sub)
+    if comp.get("state") == "complete":
+        _maybe_complete_subscription(subscription_id)
+
+
+def _maybe_complete_subscription(subscription_id: int) -> None:
+    try:
+        from app.schemas import SubscriptionUpdate
+        from app.services.subscription.crud.service import update_subscription
+
+        update_subscription(subscription_id, SubscriptionUpdate(status="completed"))
+        add_log("info", "emby_webhook", "缺集已全部入库，自动标记订阅完成", {"id": subscription_id})
+    except Exception as exc:  # noqa: BLE001 - non-fatal to the webhook response
+        add_log("debug", "emby_webhook", "Webhook 自动标记 completed 失败", {"id": subscription_id, "error": str(exc)})
 
 
 async def _auto_create_subscription(event: dict[str, Any]) -> dict | None:
@@ -227,7 +270,17 @@ async def _auto_create_subscription(event: dict[str, Any]) -> dict | None:
     )
     created = await _create(payload)
     if created and created.get("id"):
-        _tag_auto_source(int(created["id"]), event)
+        sub_id = int(created["id"])
+        _tag_auto_source(sub_id, event)
+        # The Emby "new item" event already means the media is in the library.
+        if event.get("media_type") == "movie":
+            with db() as conn:
+                conn.execute(
+                    "UPDATE subscriptions SET in_library = 1, emby_count = MAX(emby_count, 1), updated_at = ? WHERE id = ?",
+                    (utc_now(), sub_id),
+                )
+        else:
+            recompute_subscription_episodes(sub_id)
     return created or None
 
 

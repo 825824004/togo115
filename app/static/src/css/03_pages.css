@@ -968,6 +968,15 @@ legend {
 .tag.writeback { color: var(--accent, #5ad1c9); }
 .tag.auto_subscribed { color: var(--amber, #ffb454); }
 
+/* Interactive Telegram search chip on subscription cards (M5) */
+.keyword-chip.tg {
+  border-color: var(--accent, #5ad1c9);
+  color: var(--accent, #5ad1c9);
+}
+.keyword-chip.tg:hover {
+  background: color-mix(in srgb, var(--accent, #5ad1c9) 18%, transparent);
+}
+
 /* Episode missing-list popup (M1 state machine) */
 .episode-states-overlay {
   position: fixed;

@@ -1252,6 +1252,21 @@ async function renderSubscriptions() {
   document.querySelectorAll("[data-episode-states]").forEach((btn) => btn.addEventListener("click", async () => {
     await showEpisodeStates(Number(btn.dataset.episodeStates));
   }));
+  document.querySelectorAll("[data-telegram-search]").forEach((btn) => btn.addEventListener("click", async () => {
+    const id = Number(btn.dataset.telegramSearch);
+    try {
+      const res = await api(`/api/subscriptions/${id}/search/telegram`, { method: "POST", body: JSON.stringify({ only_missing: false }) });
+      if (res.skipped) {
+        toast("该订阅已无缺集，无需 TG 搜索");
+      } else {
+        toast(res.ok ? `TG 搜索完成，新增 ${res.created_count || 0} 条资源` : `TG 搜索失败：${res.error || "请查看日志"}`);
+      }
+    } catch (error) {
+      toast(`TG 搜索失败：${error.message}`);
+    }
+    await refreshSubscriptionData();
+    renderSubscriptions();
+  }));
   document.querySelectorAll("[data-deliver]").forEach((btn) => btn.addEventListener("click", async () => {
     const res = await api(`/api/resources/${btn.dataset.deliver}/deliver`, { method: "POST" });
     await refreshSubscriptionData();
@@ -1423,6 +1438,7 @@ function subscriptionCards() {
           <div class="subscription-card-actions">
             <button type="button" class="keyword-chip" data-edit="${item.id}" title="${escapeHtml(keywords)}">关键词</button>
             <button type="button" class="keyword-chip" data-edit-rules="${item.id}">规则</button>
+            <button type="button" class="keyword-chip tg" data-telegram-search="${item.id}" title="针对此订阅立即跑一次 TG 搜索">TG 搜索</button>
             ${item.media_type === "tv" ? `<button type="button" class="keyword-chip" data-episode-states="${item.id}" title="查看缺失清单">缺失清单</button>` : ""}
           </div>
         </div>
