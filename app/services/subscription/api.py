@@ -55,6 +55,7 @@ from app.services.subscription.episode_state import (
     mark_delivered as mark_episode_delivered,
     mark_in_library as mark_episode_in_library,
     mark_matched as mark_episode_matched,
+    mark_matched_episodes as mark_episode_matched_episodes,
     mark_upgraded as mark_episode_upgraded,
     recompute_missing as recompute_subscription_episodes,
 )
@@ -112,4 +113,5 @@ __all__ = [
     "mark_episode_upgraded",
     "episode_states_for",
     "subscription_completion_state",
+    "mark_episode_matched_episodes",
 ]

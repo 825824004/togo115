@@ -19,6 +19,7 @@ from app.services.subscription.library.service import (
     sync_subscriptions_with_emby_snapshot,
 )
 from app.services.subscription.delivery.link_validation import filter_available_115_results
+from app.services.subscription.episode_state import mark_matched_episodes
 from app.services.subscription.match.matching import (
     result_is_fallback_source,
     result_priority,
@@ -98,6 +99,9 @@ def _attach_results_for_subscription(subscription: dict, ordered_results: list[S
                 continue
             attached += 1
             resource_ids.append(item["resource_id"])
+            # M2: close the loop — write back M1 state for any missing episodes
+            # this resource covers so the UI missing list drops in real time.
+            mark_matched_episodes(int(subscription["id"]), result, item["resource_id"])
             if is_fallback:
                 fallback_attached = True
     return attached

@@ -4,6 +4,7 @@ from typing import Any
 
 from app.db import add_log, utc_now
 from app.services.sources.rss_torznab import SearchResult
+from app.services.subscription.episode_state import mark_matched_episodes
 from app.services.subscription.resource.ops import insert_resource_safely, resource_already_exists
 
 
@@ -22,6 +23,9 @@ def _save_telegram_result(conn, subscription: dict, result: SearchResult, existi
     if not item:
         return "failed"
     setattr(result, "_saved_item", item)
+    # M2: close the loop — write back M1 state for the missing episodes this
+    # resource covers so the on-demand TG search reflects progress immediately.
+    mark_matched_episodes(subscription_id, result, item.get("resource_id"))
     if mark_recheck:
         conn.execute(
             """

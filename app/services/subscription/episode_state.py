@@ -152,6 +152,47 @@ def mark_matched(
     _set_state(subscription_id, episode_key[0], episode_key[1], "matched", resource_id=resource_id, quality_rank=quality_rank)
 
 
+def mark_matched_episodes(
+    subscription_id: int,
+    result: Any,
+    resource_id: int | None = None,
+    *,
+    quality_rank: float | None = None,
+    extra_texts: tuple[str, ...] = (),
+) -> list[tuple[int, int]]:
+    """Write M1 state back when a resource is attached for a TV subscription (M2).
+
+    Only episodes that are still missing get moved to ``matched`` (never
+    downgrades already-owned episodes). Returns the episode keys that moved so
+    callers can log / build summaries.
+
+    Reuses the same episode extraction the match stage uses
+    (``episode_keys_from_text_for_subscription``) and intersects with the live
+    missing set, so a resource whose episodes are all already in the library is
+    ignored here — the UI missing list only drops for genuine new hits.
+    """
+    sub = get_subscription(subscription_id)
+    if not sub or sub.get("media_type") != "tv":
+        return []
+    from app.services.subscription.episode.parser import (
+        episode_keys_from_text_for_subscription,
+        missing_episode_keys,
+    )
+    from app.services.subscription.match.result_utils import result_text
+
+    missing = missing_episode_keys(sub)
+    if not missing:
+        return []
+    try:
+        episodes = episode_keys_from_text_for_subscription(sub, result_text(result, *extra_texts))
+    except Exception:
+        return []
+    hit = [k for k in episodes if k in missing]
+    for season, episode in hit:
+        mark_matched(subscription_id, (season, episode), resource_id=resource_id, quality_rank=quality_rank)
+    return hit
+
+
 def mark_delivered(
     subscription_id: int,
     episode_key: tuple[int, int] | None,
