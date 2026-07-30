@@ -42,8 +42,8 @@ def _insert_subscription_payload(payload: SubscriptionCreate) -> int:
                 """
                 INSERT INTO subscriptions
                 (title, media_type, tmdb_id, poster_url, overview, release_year, keywords, quality_rules, delivery_mode, target_path,
-                 tmdb_total_count, tmdb_seasons, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 tmdb_total_count, tmdb_seasons, upgrade_window_days, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 values,
             )
@@ -71,6 +71,7 @@ def _create_subscription_values(payload: SubscriptionCreate, now: str) -> tuple:
         payload.target_path,
         int(payload.tmdb_total_count or 0),
         json_dumps([]),
+        int(payload.upgrade_window_days or 0),
         now,
         now,
     )
