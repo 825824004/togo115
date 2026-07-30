@@ -2720,9 +2720,56 @@ async function loadTelegramDialogs() {
         <small>${escapeHtml(item.type)}${item.username ? ` @${escapeHtml(item.username)}` : ""}</small>
       </label>
     `).join("") : `<div class="muted">没有读取到群组或频道。</div>`;
+    ensureTelegramDialogSearch();
+    filterTelegramDialogs("");
   } catch (error) {
     box.innerHTML = `<div class="muted">群组/频道读取失败：${escapeHtml(error.message)}</div>`;
   }
+}
+
+// Rebuild the dialog search bar next to the list. Re-created on every load because
+// the surrounding #telegramSources fieldset is re-rendered by renderSettings() (e.g.
+// after Telegram login), which would otherwise wipe a one-time injection.
+function ensureTelegramDialogSearch() {
+  const box = $("#telegramDialogList");
+  if (!box) return;
+  const fieldset = box.closest("#telegramSources");
+  if (!fieldset) return;
+  fieldset.querySelector(".telegram-dialog-search")?.remove();
+  const wrap = document.createElement("div");
+  wrap.className = "telegram-dialog-search";
+  wrap.innerHTML = `
+    <input type="search" placeholder="搜索群组/频道（标题、@用户名、ID）" autocomplete="off" />
+    <span class="dialog-filter-count"></span>
+  `;
+  fieldset.insertBefore(wrap, box);
+  wrap.querySelector("input").addEventListener("input", (e) => filterTelegramDialogs(e.target.value));
+}
+
+// Instant client-side filter over already-loaded dialog labels. Toggles `hidden`
+// only (never re-renders), so checked state is preserved across filtering.
+function filterTelegramDialogs(rawQuery) {
+  const box = $("#telegramDialogList");
+  if (!box) return;
+  const query = (rawQuery || "").trim().toLowerCase();
+  const labels = Array.from(box.querySelectorAll("label"));
+  let visible = 0;
+  for (const label of labels) {
+    if (!query) {
+      label.classList.remove("hidden");
+      visible += 1;
+      continue;
+    }
+    const checkbox = label.querySelector('input[type="checkbox"]');
+    const title = label.querySelector("span")?.textContent || "";
+    const meta = label.querySelector("small")?.textContent || "";
+    const haystack = `${title} ${meta} ${checkbox?.value || ""}`.toLowerCase();
+    const match = haystack.includes(query);
+    label.classList.toggle("hidden", !match);
+    if (match) visible += 1;
+  }
+  const countEl = document.querySelector(".telegram-dialog-search .dialog-filter-count");
+  if (countEl) countEl.textContent = query ? `匹配 ${visible} / ${labels.length}` : "";
 }
 
 function selectPanFolder(cid, path) {

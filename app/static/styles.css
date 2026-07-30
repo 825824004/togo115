@@ -2156,6 +2156,28 @@ legend {
   color: var(--muted);
 }
 
+.dialog-list label.hidden {
+  display: none;
+}
+
+.telegram-dialog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.telegram-dialog-search input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.telegram-dialog-search .dialog-filter-count {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .folder-row {
   width: 100%;
   color: var(--ink-soft);
