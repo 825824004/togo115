@@ -53,6 +53,14 @@ async def bulk_delete_subscriptions(payload: SubscriptionBulkDeleteRequest, user
     return {"ok": True, "deleted": deleted}
 
 
+@router.post("/api/subscriptions/upgrade-windows/close")
+async def close_upgrade_windows(user: dict = Depends(current_user)) -> dict:
+    from app.services.subscription import close_expired_upgrade_windows
+
+    closed = await asyncio.to_thread(close_expired_upgrade_windows)
+    return {"ok": True, "closed": closed}
+
+
 @router.post("/api/subscriptions")
 async def post_subscription(payload: SubscriptionCreate, user: dict = Depends(current_user)) -> dict:
     return await create_subscription(payload)

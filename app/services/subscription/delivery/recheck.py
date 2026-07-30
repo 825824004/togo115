@@ -53,6 +53,15 @@ async def recheck_pending_115_resources(
     for item in outcomes:
         for key in ("delivered", "invalid", "pending", "failed", "shared_invalid"):
             summary[key] += int(item.get(key) or 0)
+    # M4: opportunistically close any quality upgrade windows that have expired
+    # while we are already on the periodic maintenance loop.
+    try:
+        from app.services.subscription.upgrade import close_expired_upgrade_windows
+
+        summary["upgrade_windows_closed"] = close_expired_upgrade_windows()
+    except Exception as exc:  # pragma: no cover - defensive
+        add_log("warning", "subscription", "洗版窗口过期自动关闭异常，已忽略", {"error": str(exc)})
+        summary["upgrade_windows_closed"] = 0
     add_log("info", "subscription", "115 \u5f85\u590d\u68c0\u8d44\u6e90\u5904\u7406\u5b8c\u6210", summary)
     return summary
 

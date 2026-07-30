@@ -1404,6 +1404,11 @@ function subscriptionCards() {
         ...(rules.exclude_keywords || []).slice(0, 1).map((value) => `排除 ${value}`),
         rules.accept_mode && rules.accept_mode !== "all" ? (rules.accept_mode === "pack" ? "只要合集" : "只要单集") : "",
       ].filter(Boolean).slice(0, 2).map((value) => `<span>${escapeHtml(value)}</span>`).join("");
+      const upgradeWindowBadge = !item.upgrade_window_days
+        ? ""
+        : (item.upgrade_closed_at
+          ? `<span class="subscription-badge upgrade-window closed" title="洗版期已结束，不再自动追更高画质">洗版期已关闭</span>`
+          : `<span class="subscription-badge upgrade-window" title="资源入库后 ${item.upgrade_window_days} 天内自动追更高画质">洗版 ${item.upgrade_window_days} 天</span>`);
       return `<article class="subscription-card ${state.subscriptionCancelMode ? "selecting" : ""}">
         ${state.subscriptionCancelMode ? `<label class="subscription-select"><input type="checkbox" data-select-subscription="${item.id}" ${checked} /><span></span></label>` : ""}
         <div class="subscription-poster">
@@ -1428,6 +1433,7 @@ function subscriptionCards() {
           <div class="subscription-meta-row">
             <span>${escapeHtml(library)}</span>
             <span class="subscription-badge media-type">${item.media_type === "tv" ? "电视剧" : "电影"}</span>
+            ${upgradeWindowBadge}
             ${keywordTags ? `<div class="subscription-keywords">${keywordTags}</div>` : ""}
             ${ruleTags ? `<div class="subscription-rules">${ruleTags}</div>` : ""}
           </div>

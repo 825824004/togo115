@@ -15,6 +15,7 @@ def normalize_subscription(row) -> dict:
     item["keywords"] = json_loads(item.get("keywords"), [])
     item["quality_rules"] = normalize_quality_rules(json_loads(item.get("quality_rules"), {}))
     item["in_library"] = bool(item.get("in_library"))
+    item["upgrade_closed_at"] = item.get("upgrade_closed_at")
     item["tmdb_seasons"] = json_loads(item.get("tmdb_seasons"), [])
     item["emby_episode_keys"] = json_loads(item.get("emby_episode_keys"), [])
     if item.get("release_year") is None:

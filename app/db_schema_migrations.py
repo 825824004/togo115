@@ -50,6 +50,7 @@ _SUBSCRIPTION_COLUMNS = {
     "completed_at": "TEXT",
     "last_checked_at": "TEXT",
     "upgrade_window_days": "INTEGER NOT NULL DEFAULT 0",
+    "upgrade_closed_at": "TEXT",
 }
 
 _RESOURCE_COLUMNS = {

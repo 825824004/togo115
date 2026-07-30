@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from app.db import json_dumps, utc_now
+from app.db import db, json_dumps, utc_now
 from app.services.subscription.episode.parser import episode_keys_from_text_for_subscription
 from app.services.subscription.match.quality import _text_contains_any
 
@@ -115,13 +115,17 @@ def maybe_upgrade(conn: Any, resource_id: int) -> bool:
     # Read the subscription on the same connection (no nested transaction) to avoid
     # SQLite lock contention while the delivery write txn is still open.
     sub = conn.execute(
-        "SELECT id, media_type, tmdb_seasons, emby_episode_keys, emby_count, tmdb_total_count, upgrade_window_days "
+        "SELECT id, media_type, tmdb_seasons, emby_episode_keys, emby_count, tmdb_total_count, "
+        "upgrade_window_days, upgrade_closed_at "
         "FROM subscriptions WHERE id = ?",
         (int(row["subscription_id"]),),
     ).fetchone()
     if not sub:
         return False
     subscription = dict(sub)
+    # Defensive: if the upgrade window was already auto-closed, never supersede.
+    if subscription.get("upgrade_closed_at"):
+        return False
     window_days = int(subscription.get("upgrade_window_days") or 0)
     if window_days <= 0:
         return False
@@ -205,3 +209,89 @@ def maybe_upgrade(conn: Any, resource_id: int) -> bool:
         (new_rank, now.isoformat(), resource_id),
     )
     return upgraded
+
+
+def close_expired_upgrade_windows(conn: Any | None = None) -> int:
+    """Auto-close quality upgrade windows that have passed their expiry (M4).
+
+    For every ``active`` subscription with ``upgrade_window_days > 0`` and at least
+    one delivered (non-superseded) resource, the window end is
+    ``max(delivered_at) + upgrade_window_days``. Once ``now`` is past that end the
+    upgrade chase is closed (``upgrade_closed_at`` is stamped), so
+    :func:`maybe_upgrade` can no longer supersede for this subscription.
+
+    If the subscription content is already complete (all wanted episodes
+    delivered/in-library, or the movie is in the library), it is also soft-completed
+    so it leaves the active list — consistent with the Emby/library-sync completion
+    path. Incomplete subscriptions (still missing episodes) keep the window closed
+    but stay active to keep chasing the missing content.
+
+    Returns the number of subscriptions whose upgrade window was closed.
+    """
+    from app.services.subscription.crud.rows import get_subscription
+    from app.services.subscription.episode_state import completion_state
+    from app.services.subscription.library.match import mark_completed_subscription
+
+    now = datetime.now(timezone.utc)
+
+    def _fetch_rows(c: Any) -> list:
+        return c.execute(
+            """
+            SELECT s.id AS subscription_id, s.upgrade_window_days,
+                   MAX(r.delivered_at) AS last_delivered_at
+            FROM subscriptions s
+            JOIN resources r
+              ON r.subscription_id = s.id
+             AND r.status = 'delivered'
+             AND r.superseded_by IS NULL
+            WHERE s.status = 'active'
+              AND s.upgrade_window_days > 0
+              AND s.upgrade_closed_at IS NULL
+            GROUP BY s.id
+            """
+        ).fetchall()
+
+    def _process(row: dict) -> bool:
+        last_delivered = row["last_delivered_at"]
+        if not last_delivered:
+            return False
+        try:
+            dt = datetime.fromisoformat(last_delivered)
+        except (ValueError, TypeError):
+            return False
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        window_days = int(row["upgrade_window_days"] or 0)
+        if now < dt + timedelta(days=window_days):
+            return False
+        # Commit the close in its own connection so the subsequent completion
+        # helpers (which open their own connections) never hit a lock.
+        with db() as c:
+            c.execute(
+                "UPDATE subscriptions SET upgrade_closed_at = ?, updated_at = ? WHERE id = ?",
+                (now.isoformat(), utc_now(), int(row["subscription_id"])),
+            )
+        try:
+            sub = get_subscription(int(row["subscription_id"]))
+            if sub:
+                comp = completion_state(sub)
+                if comp and comp.get("state") == "complete":
+                    mark_completed_subscription(sub)
+        except Exception:
+            # Completion is a best-effort nicety; never break the close write.
+            pass
+        return True
+
+    if conn is not None:
+        closed = 0
+        for row in _fetch_rows(conn):
+            if _process(row):
+                closed += 1
+        return closed
+    with db() as c:
+        rows = _fetch_rows(c)
+    closed = 0
+    for row in rows:
+        if _process(row):
+            closed += 1
+    return closed

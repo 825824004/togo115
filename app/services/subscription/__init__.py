@@ -31,6 +31,7 @@ __all__ = [
     "normalize_subscription",
     "recheck_pending_115_resources",
     "refresh_rss_sources",
+    "close_expired_upgrade_windows",
     "retry_failed_resources",
     "schedule_emby_subscription_sync",
     "schedule_recheck_pending_115",

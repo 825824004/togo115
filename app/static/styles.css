@@ -1361,6 +1361,18 @@ textarea:focus {
   background: var(--brand-2);
 }
 
+.subscription-badge.upgrade-window {
+  color: #281606;
+  border-color: transparent;
+  background: var(--brand-2);
+}
+
+.subscription-badge.upgrade-window.closed {
+  color: var(--muted);
+  background: rgba(255, 255, 255, .08);
+  border-color: var(--line);
+}
+
 .subscription-progress {
   position: absolute;
   left: 8px;
