@@ -20,7 +20,7 @@ function renderSettings() {
     proxy: ["代理设置", "填写一个代理地址，并勾选需要走代理的模块。"],
     rss_sources: ["订阅源", "管理 RSS、Torznab、站点插件和海搜官方 API 订阅源。Telegram 未命中后作为补充来源；海搜按次计费。"],
     tg_bot: ["TG Bot", "配置机器人命令入口和允许操作的聊天范围。"],
-    emby: ["媒体库", "配置 Emby 服务地址和 API Key，用于入库状态与缺集判断。"],
+    emby: ["媒体库", "配置 Emby 服务地址、API Key，以及 Webhook（实时回写入库状态、自动订阅新媒体）。"],
     backup: ["备份恢复", "导出或导入系统配置、订阅和订阅源数据。"],
   };
   const [currentTitle, currentDescription] = tabMeta[state.settingsTab] || tabMeta.credentials;
@@ -36,7 +36,7 @@ function renderSettings() {
     proxy: settingsCard("代理设置", "proxy", [["url", "代理地址"], ["modules", "启用代理的模块"]]),
     rss_sources: rssSourcesCard(),
     tg_bot: settingsCard("TG Bot", "tg_bot", [["bot_token", "监听 Bot Token"], ["bot_username", "转发目标机器人用户名"], ["allowed_chat_id", "允许的 Chat ID"]]),
-    emby: settingsCard("媒体库", "emby", [["server_url", "Emby 地址"], ["api_key", "API Key"]]),
+    emby: settingsCard("媒体库", "emby", [["server_url", "Emby 地址"], ["api_key", "API Key"]]) + embyWebhookCard(),
     backup: backupCard(),
   };
   $("#view").innerHTML = `
@@ -71,6 +71,7 @@ function renderSettings() {
   $("#exportBackup")?.addEventListener("click", exportBackup);
   $("#importBackup")?.addEventListener("click", importBackup);
   enhanceIntegrationCards();
+  if (document.getElementById("embyWebhookSettings")) loadEmbyWebhookSettings();
 }
 
 function settingsCard(title, key, fields) {
@@ -144,4 +145,61 @@ function fieldHtml(key, name, label, current, type = "text") {
     </fieldset>`;
   }
   return `<label>${label}<input type="${type}" name="${name}" value="${current}" /></label>`;
+}
+
+function embyWebhookCard() {
+  return `<section class="card form-grid" id="embyWebhookSettings">
+    <h3>Emby Webhook</h3>
+    <p class="muted">将下方地址填入 Emby 的 Webhook 插件（通知类型选「项目添加 / Library.NewItem」）：</p>
+    <code class="emby-webhook-url" id="ewWebhookUrl">加载中…</code>
+    <label class="switch-row"><input type="checkbox" id="ewEnabled" /> <span>启用 Webhook</span></label>
+    <label class="switch-row"><input type="checkbox" id="ewAuto" /> <span>新媒体自动创建订阅</span></label>
+    <label class="switch-row sub"><input type="checkbox" id="ewMovies" /> <span>自动订阅电影</span></label>
+    <label class="switch-row sub"><input type="checkbox" id="ewSeries" /> <span>自动订阅剧集</span></label>
+    <label class="switch-row"><input type="checkbox" id="ewMatch" /> <span>回写已有订阅的入库状态</span></label>
+    <label class="emby-webhook-token">共享密钥（可选，与 Emby Webhook 的 Token 字段一致）
+      <input type="text" id="ewToken" placeholder="留空则不校验" />
+    </label>
+    <div class="inline-actions"><button type="button" id="ewSave">保存配置</button></div>
+    <div class="emby-webhook-events">
+      <h4>最近事件</h4>
+      <div id="ewEvents"><div class="muted">暂无事件</div></div>
+    </div>
+  </section>`;
+}
+
+async function loadEmbyWebhookSettings() {
+  const root = document.getElementById("embyWebhookSettings");
+  if (!root) return;
+  const status = await apiQuick("/api/emby/webhook/status", { ok: true, config: {}, recent_events: [] });
+  const cfg = status.config || {};
+  document.getElementById("ewWebhookUrl").textContent = `${location.origin}/api/emby/webhook`;
+  document.getElementById("ewEnabled").checked = !!cfg.enabled;
+  document.getElementById("ewAuto").checked = !!cfg.auto_subscribe;
+  document.getElementById("ewMovies").checked = cfg.auto_subscribe_movies !== false;
+  document.getElementById("ewSeries").checked = cfg.auto_subscribe_series !== false;
+  document.getElementById("ewMatch").checked = cfg.match_existing !== false;
+  document.getElementById("ewToken").value = cfg.token || "";
+  const eventsBox = document.getElementById("ewEvents");
+  if (eventsBox) {
+    eventsBox.innerHTML = (status.recent_events || []).slice(0, 6).map((e) =>
+      `<div class="event-row"><span class="tag ${e.action}">${escapeHtml(e.action)}</span> ${escapeHtml(e.title || "")}</div>`
+    ).join("") || '<div class="muted">暂无事件</div>';
+  }
+  const save = document.getElementById("ewSave");
+  if (save) save.addEventListener("click", saveEmbyWebhookSettings);
+}
+
+async function saveEmbyWebhookSettings() {
+  const value = {
+    enabled: document.getElementById("ewEnabled").checked,
+    auto_subscribe: document.getElementById("ewAuto").checked,
+    auto_subscribe_movies: document.getElementById("ewMovies").checked,
+    auto_subscribe_series: document.getElementById("ewSeries").checked,
+    match_existing: document.getElementById("ewMatch").checked,
+    token: document.getElementById("ewToken").value.trim(),
+  };
+  await api("/api/emby/webhook/settings", { method: "PUT", body: JSON.stringify({ value }) });
+  toast("Emby Webhook 配置已保存");
+  loadEmbyWebhookSettings();
 }

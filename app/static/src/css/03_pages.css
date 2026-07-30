@@ -990,6 +990,11 @@ legend {
 .tag.writeback { color: var(--accent, #5ad1c9); }
 .tag.auto_subscribed { color: var(--amber, #ffb454); }
 
+/* Read-only hint on the Emby dashboard pointing to the Settings page */
+.emby-webhook-hint {
+  margin-top: 14px;
+}
+
 /* Interactive Telegram search chip on subscription cards (M5) */
 .keyword-chip.tg {
   border-color: var(--accent, #5ad1c9);
